@@ -91,4 +91,5 @@
          "R" #'sp-rewrap-sexp
          "w" #'paredit-wrap-sexp
          "'" #'paredit-meta-doublequote
-         "y" #'sp-copy-sexp))))
+         "y" #'sp-copy-sexp
+         "k" #'helm-show-kill-ring))))
