@@ -77,6 +77,10 @@
 ;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
 ;; they are implemented.
 
+(after! clojure
+  (add-hook 'clojure-mode-hook #'enable-paredit-mode)
+  (add-hook 'clojurescript-mode-hook #'enable-paredit-mode))
+
 (map! (:leader
        (:map (clojure-mode-map clojurescript-mode-map emacs-lisp-mode-map)
              (:prefix ("k" . "lisp")
@@ -93,7 +97,7 @@
                       "w" #'paredit-wrap-sexp
                       "'" #'paredit-meta-doublequote
                       "y" #'sp-copy-sexp
-                      "k" #'helm-show-kill-ring))))
+                      "k" #'browse-kill-ring))))
 
 (setq enable-local-variables 'always)
 
