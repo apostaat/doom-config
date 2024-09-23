@@ -99,9 +99,21 @@
                       "y" #'sp-copy-sexp
                       "k" #'browse-kill-ring))))
 
+(use-package! gptel
+  :config
+  (setq! gptel-api-key "oops"))
+
 (setq enable-local-variables 'always)
 
 ;; Enable evaluation of Clojure code blocks
+
+(after! cua-base
+  (cua-mode t)
+  (setq cua-auto-tabify-rectangles nil)
+  (setq cua-keep-region-after-copy t))
+
+;; Enable transient mark mode
+(transient-mark-mode 1)
 
 ;; (after! org
 ;;   (require 'ob-clojure)

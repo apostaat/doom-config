@@ -57,3 +57,4 @@
 (package! fb2-reader)
 (package! ob-clojure-literate :disable t)
 (package! browse-kill-ring)
+(package! gptel)
