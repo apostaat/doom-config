@@ -58,3 +58,4 @@
 (package! ob-clojure-literate :disable t)
 (package! browse-kill-ring)
 (package! gptel)
+(package! sayid)
