@@ -115,6 +115,45 @@
 ;; Enable transient mark mode
 (transient-mark-mode 1)
 
+(defun clj-insert-persist-scope-macro ()
+  (interactive)
+  (insert
+   "(defmacro persist-scope
+              \"Takes local scope vars and defines them in the global scope. Useful for RDD\"
+              []
+              `(do ~@(map (fn [v] `(def ~v ~v))
+                  (keys (cond-> &env (contains? &env :locals) :locals)))))"))
+
+(defun clj-insert-quick-bench ()
+  (interactive)
+  (let* ((current-ns (cider-current-ns))
+         (form (cider-last-sexp))
+         (clj-cmd (format "(do (require 'criterium.core) (criterium.core/quick-bench %s))" form)))
+    (cider-interactive-eval clj-cmd nil nil `(("ns" ,current-ns)))))
+
+(defun persist-scope ()
+  (interactive)
+  (let ((beg (point)))
+    (clj-insert-persist-scope-macro)
+    (cider-eval-region beg (point))
+    (delete-region beg (point))
+    (insert "(persist-scope)")
+    (cider-eval-defun-at-point)
+    (delete-region beg (point))))
+
+(eval-after-load 'clojure-mode
+  '(sayid-setup-package))
+
+(map! :leader
+      :prefix ("e" . "Clojure Command Center")
+      :desc "Persist Scope Macro" "p" #'persist-scope
+      :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
+      (:prefix ("s" . "Sayid Debugger")
+       :desc "Toggle View" "v" #'sayid-toggle-view
+       :desc "Get Workspace" "w" #'sayid-get-workspace
+       :desc "Clear Log" "c" #'sayid-clear-log
+       :desc "Trace Namespace in File" "t" #'sayid-trace-ns-in-file))
+
 ;; (after! org
 ;;   (require 'ob-clojure)
 ;;   (org-babel-do-load-languages
