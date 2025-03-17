@@ -34,7 +34,7 @@
 ;; `load-theme' function. This is the default:
 (setq doom-theme 'doom-vibrant)
 ;; (setq doom-theme 'doom-solarized-light)
-(setq doom-font (font-spec :family "JetBrains Mono" :size 13.0))
+;; (setq doom-font (font-spec :family "JetBrains Mono" :size 13.0))
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
 (setq display-line-numbers-type t)
@@ -99,10 +99,6 @@
                       "y" #'sp-copy-sexp
                       "k" #'browse-kill-ring))))
 
-(use-package! gptel
-  :config
-  (setq! gptel-api-key "oops"))
-
 (setq enable-local-variables 'always)
 
 ;; Enable evaluation of Clojure code blocks
@@ -141,18 +137,10 @@
     (cider-eval-defun-at-point)
     (delete-region beg (point))))
 
-(eval-after-load 'clojure-mode
-  '(sayid-setup-package))
-
 (map! :leader
       :prefix ("e" . "Clojure Command Center")
       :desc "Persist Scope Macro" "p" #'persist-scope
-      :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
-      (:prefix ("s" . "Sayid Debugger")
-       :desc "Toggle View" "v" #'sayid-toggle-view
-       :desc "Get Workspace" "w" #'sayid-get-workspace
-       :desc "Clear Log" "c" #'sayid-clear-log
-       :desc "Trace Namespace in File" "t" #'sayid-trace-ns-in-file))
+      :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench)
 
 ;; (after! org
 ;;   (require 'ob-clojure)
