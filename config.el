@@ -32,9 +32,14 @@
 ;; There are two ways to load a theme. Both assume the theme is installed and
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
+
 (setq doom-theme 'doom-vibrant)
+
 ;; (setq doom-theme 'doom-solarized-light)
-;; (setq doom-font (font-spec :family "JetBrains Mono" :size 13.0))
+;; (setq doom-font (font-spec :family "Hack Nerd Font Mono"))
+
+
+
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
 (setq display-line-numbers-type t)
@@ -148,3 +153,24 @@
 ;;    'org-babel-load-languages
 ;;    '((emacs-lisp . t)
 ;;      (clojure . t))))
+
+
+(after! cc-mode
+  (defun my/cpp-run-current-file-in-term ()
+    "Open ansi-term in a split window and run `make run <filename>`."
+    (interactive)
+    (let* ((filename (file-name-nondirectory (buffer-file-name)))
+           (cmd (format "make run %s\n" filename)))
+      ;; открыть новый сплит снизу (1/3 высоты)
+      (split-window-below -10)
+      (other-window 1)
+      ;; запуск shell через ansi-term
+      (ansi-term "/bin/zsh") ;; поменяй на /bin/bash если нужно
+      (sit-for 0.2)
+      ;; вставляем команду
+      (term-send-raw-string cmd)))
+
+  (map! :map c++-mode-map
+        :localleader
+        :desc "Make run current file"
+        "r" #'my/cpp-run-current-file-in-term))
