@@ -1,0 +1,8 @@
+# -*- mode: snippet -*-
+# name: print-map
+# key: print-map
+# condition: t
+# --
+for (const auto& pair : ${1:m}) {
+    std::cout << pair.first << "\\n";
+}
