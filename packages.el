@@ -59,3 +59,6 @@
 (package! browse-kill-ring)
 (package! ws-butler
   :recipe (:repo "https://github.com/lewang/ws-butler.git" :host nil))
+(package! exec-path-from-shell)
+(package! erlfmt
+  :recipe (:host github :repo "WhatsApp/erlfmt"))
