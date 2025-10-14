@@ -77,8 +77,8 @@
 
        :term
        ;; eshell            ; the elisp shell that works everywhere
-       shell             ; simple shell REPL for Emacs
-       ;;term              ; basic terminal emulator for Emacs
+       ;; shell             ; simple shell REPL for Emacs
+       term              ; basic terminal emulator for Emacs
        ;; vterm             ; the best terminal emulation in Emacs
 
        :checkers
@@ -94,6 +94,7 @@
        ;;docker
        ;;editorconfig      ; let someone else argue about tabs vs spaces
        ;;ein               ; tame Jupyter notebooks with emacs
+       ;;tree-sitter
        (eval +overlay)     ; run code, run (also, repls)
        ;;gist              ; interacting with github gists
        lookup              ; navigate your code and its documentation

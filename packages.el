@@ -57,8 +57,13 @@
 (package! fb2-reader)
 (package! ob-clojure-literate :disable t)
 (package! browse-kill-ring)
-(package! ws-butler
-  :recipe (:repo "https://github.com/lewang/ws-butler.git" :host nil))
+(package! ws-butler)
 (package! exec-path-from-shell)
 (package! erlfmt
   :recipe (:host github :repo "WhatsApp/erlfmt"))
+(package! inf-elixir)
+;; (package! elixir-ts-mode)
+;; (package! ts-fold
+;;   :recipe (:host github :repo "emacs-tree-sitter/ts-fold"))
+
+(package! yafolding)

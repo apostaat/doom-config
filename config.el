@@ -33,7 +33,7 @@
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
 
-(setq doom-theme 'doom-vibrant)
+(setq doom-theme 'doom-pine)
 
 ;; (setq doom-theme 'doom-solarized-light)
 ;; (setq doom-font (font-spec :family "Hack Nerd Font Mono"))
@@ -174,3 +174,26 @@
         :localleader
         :desc "Make run current file"
         "r" #'my/cpp-run-current-file-in-term))
+
+(map! :after elixir-mode
+      :localleader
+      :map elixir-mode-map
+      :prefix ("i" . "inf-elixir")
+      "i" 'inf-elixir
+      "p" 'inf-elixir-project
+      "l" 'inf-elixir-send-line
+      "r" 'inf-elixir-send-region
+      "b" 'inf-elixir-send-buffer
+      "R" 'inf-elixir-reload-module)
+
+(after! elixir-mode
+  (require 'yafolding)
+  ;; (require 'yafolding-mode)
+  (add-hook 'elixir-mode-hook #'yafolding-mode)
+  (setq yafolding-mode-alist
+        '((elixir-mode . "^\\(defmodule\\|defp?\\|defmacro\\|test\\|describe\\)\\b")))
+  (with-eval-after-load
+      'elixir-mode
+    (map! :map elixir-mode-map :n "za" #'yafolding-toggle-element :n "zA" #'yafolding-toggle-all)))
+
+
