@@ -196,4 +196,21 @@
       'elixir-mode
     (map! :map elixir-mode-map :n "za" #'yafolding-toggle-element :n "zA" #'yafolding-toggle-all)))
 
+(setq org-clock-sound "/Users/artemapostatov/Desktop/xanax.wav")
 
+(defun start-work-session ()
+  (interactive)
+  (org-timer-set-timer "0:45:00"))
+
+(defun start-rest-session ()
+  (interactive)
+  (org-timer-set-timer "0:15:00"))
+
+(map! :leader
+      :prefix ("S" . "org-pomodorro-timer")
+      "w" #'start-work-session
+      "r" #'start-rest-session)
+
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs
+               '(elixir-mode . ("/Users/artemapostatov/elixir-ls/release/language_server.sh"))))
