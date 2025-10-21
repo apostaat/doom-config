@@ -186,6 +186,16 @@
       "b" 'inf-elixir-send-buffer
       "R" 'inf-elixir-reload-module)
 
+(defun my/inf-elixir-clean-output (output)
+  (replace-regexp-in-string
+     "\\(\\.\\.\\.([0-9]+)> \\)\\{5,\\}"
+     "[:repeated_prompt_omitted]\n" output))
+
+(add-hook 'inf-elixir-mode-hook #'visual-line-mode)
+(add-hook 'inf-elixir-mode-hook (lambda ()
+                                  (add-hook 'comint-preoutput-filter-functions
+                                            #'my/inf-elixir-clean-output nil t)))
+
 (after! elixir-mode
   (require 'yafolding)
   ;; (require 'yafolding-mode)
