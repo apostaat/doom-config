@@ -224,3 +224,13 @@
 (with-eval-after-load 'eglot
   (add-to-list 'eglot-server-programs
                '(elixir-mode . ("/Users/artemapostatov/elixir-ls/release/language_server.sh"))))
+
+(after! lisp-extra-font-lock
+  (lisp-extra-font-lock-global-mode 1))
+
+(after! lisp-mode
+  (add-to-list 'auto-mode-alist '("\\.opmo\\'" . lisp-mode)))
+
+(after! prog-mode
+  (add-hook! 'lisp-mode-hook
+             #'rainbow-identifiers-mode))

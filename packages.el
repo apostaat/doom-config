@@ -67,3 +67,9 @@
 ;;   :recipe (:host github :repo "emacs-tree-sitter/ts-fold"))
 
 (package! yafolding)
+
+(package! lisp-extra-font-lock
+  :recipe (:host github :repo "Lindydancer/lisp-extra-font-lock"))
+
+(package! rainbow-identifiers
+  :recipe (:host github :repo "Fanael/rainbow-identifiers"))
