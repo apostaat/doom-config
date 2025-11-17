@@ -73,3 +73,9 @@
 
 (package! rainbow-identifiers
   :recipe (:host github :repo "Fanael/rainbow-identifiers"))
+
+(package! rainbow-delimiters)
+
+(package! exec-path-from-shell)
+
+(package! gptel :recipe (:nonrecursive t))

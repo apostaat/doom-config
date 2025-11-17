@@ -33,7 +33,7 @@
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
 
-(setq doom-theme 'doom-pine)
+(setq doom-theme 'doom-sourcerer)
 
 ;; (setq doom-theme 'doom-solarized-light)
 ;; (setq doom-font (font-spec :family "Hack Nerd Font Mono"))
@@ -82,10 +82,6 @@
 ;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
 ;; they are implemented.
 
-(after! clojure
-  (add-hook 'clojure-mode-hook #'enable-paredit-mode)
-  (add-hook 'clojurescript-mode-hook #'enable-paredit-mode))
-
 (map! (:leader
        (:map (clojure-mode-map clojurescript-mode-map emacs-lisp-mode-map)
              (:prefix ("k" . "lisp")
@@ -115,6 +111,13 @@
 
 ;; Enable transient mark mode
 (transient-mark-mode 1)
+
+(when (memq window-system '(x pgtk))
+  (require 'exec-path-from-shell)
+  ;; Import common environment variables
+  (dolist (var '("PATH" "MANPATH" "JAVA_HOME"))
+    (add-to-list 'exec-path-from-shell-variables var))
+  (exec-path-from-shell-initialize))
 
 (defun clj-insert-persist-scope-macro ()
   (interactive)
@@ -147,12 +150,13 @@
       :desc "Persist Scope Macro" "p" #'persist-scope
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench)
 
-;; (after! org
-;;   (require 'ob-clojure)
-;;   (org-babel-do-load-languages
-;;    'org-babel-load-languages
-;;    '((emacs-lisp . t)
-;;      (clojure . t))))
+;; (map! :leader
+;;       :prefix ("a" . "AI")
+;;       :desc "s" #'gptel-send
+;;       "C" #'gptel-send-and-switch-to-buffer
+;;       "b" #'gptel-switch-backend
+;;       "r" #'gptel-clear-context)
+
 
 
 (after! cc-mode
@@ -188,8 +192,8 @@
 
 (defun my/inf-elixir-clean-output (output)
   (replace-regexp-in-string
-     "\\(\\.\\.\\.([0-9]+)> \\)\\{5,\\}"
-     "[:repeated_prompt_omitted]\n" output))
+   "\\(\\.\\.\\.([0-9]+)> \\)\\{5,\\}"
+   "[:repeated_prompt_omitted]\n" output))
 
 (add-hook 'inf-elixir-mode-hook #'visual-line-mode)
 (add-hook 'inf-elixir-mode-hook (lambda ()
@@ -206,7 +210,7 @@
       'elixir-mode
     (map! :map elixir-mode-map :n "za" #'yafolding-toggle-element :n "zA" #'yafolding-toggle-all)))
 
-(setq org-clock-sound "/Users/artemapostatov/Desktop/xanax.wav")
+(setq org-clock-sound "/home/apostaat/Downloads/pause1.mp3")
 
 (defun start-work-session ()
   (interactive)
@@ -234,3 +238,24 @@
 (after! prog-mode
   (add-hook! 'lisp-mode-hook
              #'rainbow-identifiers-mode))
+
+(add-hook 'prog-mode-hook #'rainbow-delimiters-mode)
+
+(after! gptel
+  :config
+  (setq gptel-backend
+        (gptel-make-ollama "Local CodeLlama"
+          :host "localhost:11434"  ; Ollama default port
+          :models '("codellama:7b")
+          :stream t))
+
+
+  (setq gptel-model 'codellama:7b) 
+  ;; Set as default backend
+  ;; (setq gptel-default-mode 'gptel-ollama-mode)
+  
+  ;; Optional: Set some reasonable defaults for code generation
+  (setq gptel-max-tokens 2048
+        gptel-temperature 0.2))
+
+
