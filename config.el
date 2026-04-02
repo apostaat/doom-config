@@ -34,53 +34,10 @@
 ;; `load-theme' function. This is the default:
 
 (setq doom-theme 'doom-sourcerer)
-
-;; (setq doom-theme 'doom-solarized-light)
-;; (setq doom-font (font-spec :family "Hack Nerd Font Mono"))
-
-
-
-;; This determines the style of line numbers in effect. If set to `nil', line
-;; numbers are disabled. For relative line numbers, set this to `relative'.
 (setq display-line-numbers-type t)
-
-;; If you use `org' and don't want your org files in the default location below,
-;; change `org-directory'. It must be set before org loads!
 (setq org-directory "~/org/")
 
-(setq org-roam-directory "~/Downloads/MyOrgRoam")
-
-;; Whenever you reconfigure a package, make sure to wrap your config in an
-;; `after!' block, otherwise Doom's defaults may override your settings. E.g.
-;;
-;;   (after! PACKAGE
-;;     (setq x y))
-;;
-;; The exceptions to this rule:
-;;
-;;   - Setting file/directory variables (like `org-directory')
-;;   - Setting variables which explicitly tell you to set them before their
-;;     package is loaded (see 'C-h v VARIABLE' to look up their documentation).
-;;   - Setting doom variables (which start with 'doom-' or '+').
-;;
-;; Here are some additional functions/macros that will help you configure Doom.
-;;
-;; - `load!' for loading external *.el files relative to this one
-;; - `use-package!' for configuring packages
-;; - `after!' for running code after a package has loaded
-;; - `add-load-path!' for adding directories to the `load-path', relative to
-;;   this file. Emacs searches the `load-path' when you load packages with
-;;   `require' or `use-package'.
-;; - `map!' for binding new keys
-;;
-;; To get information about any of these functions/macros, move the cursor over
-;; the highlighted symbol at press 'K' (non-evil users must press 'C-c c k').
-;; This will open documentation for it, including demos of how they are used.
-;; Alternatively, use `C-h o' to look up a symbol (functions, variables, faces,
-;; etc).
-;;
-;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
-;; they are implemented.
+(setq org-roam-directory "~/org/roam")
 
 (map! (:leader
        (:map (clojure-mode-map clojurescript-mode-map emacs-lisp-mode-map)
@@ -150,15 +107,6 @@
       :desc "Persist Scope Macro" "p" #'persist-scope
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench)
 
-;; (map! :leader
-;;       :prefix ("a" . "AI")
-;;       :desc "s" #'gptel-send
-;;       "C" #'gptel-send-and-switch-to-buffer
-;;       "b" #'gptel-switch-backend
-;;       "r" #'gptel-clear-context)
-
-
-
 (after! cc-mode
   (defun my/cpp-run-current-file-in-term ()
     "Open ansi-term in a split window and run `make run <filename>`."
@@ -202,7 +150,6 @@
 
 (after! elixir-mode
   (require 'yafolding)
-  ;; (require 'yafolding-mode)
   (add-hook 'elixir-mode-hook #'yafolding-mode)
   (setq yafolding-mode-alist
         '((elixir-mode . "^\\(defmodule\\|defp?\\|defmacro\\|test\\|describe\\)\\b")))
@@ -241,21 +188,18 @@
 
 (add-hook 'prog-mode-hook #'rainbow-delimiters-mode)
 
-(after! gptel
-  :config
-  (setq gptel-backend
-        (gptel-make-ollama "Local CodeLlama"
-          :host "localhost:11434"  ; Ollama default port
-          :models '("codellama:7b")
-          :stream t))
+;; indentation
+(setq typescript-indent-level 2)
 
+(set-language-environment "UTF-8")
+(prefer-coding-system 'utf-8-unix)
+(set-default-coding-systems 'utf-8-unix)
+(set-selection-coding-system 'utf-8)
+(set-clipboard-coding-system 'utf-8)
+(setq-default buffer-file-coding-system 'utf-8-unix)
 
-  (setq gptel-model 'codellama:7b) 
-  ;; Set as default backend
-  ;; (setq gptel-default-mode 'gptel-ollama-mode)
-  
-  ;; Optional: Set some reasonable defaults for code generation
-  (setq gptel-max-tokens 2048
-        gptel-temperature 0.2))
-
+;; Forge configuration
+;; Remember to create a GitHub token and add it to ~/.authinfo or ~/.authinfo.gpg:
+;; machine api.github.com login <your-github-username>^forge password <your-token>
+(setq auth-sources '("~/.authinfo"))
 

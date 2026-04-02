@@ -65,8 +65,12 @@
 ;; (package! elixir-ts-mode)
 ;; (package! ts-fold
 ;;   :recipe (:host github :repo "emacs-tree-sitter/ts-fold"))
+(package! nov
+  :recipe (:host github :repo "wasamasa/nov.el"))
 
 (package! yafolding)
+
+(package! forge)
 
 (package! lisp-extra-font-lock
   :recipe (:host github :repo "Lindydancer/lisp-extra-font-lock"))
@@ -78,4 +82,7 @@
 
 (package! exec-path-from-shell)
 
-(package! gptel :recipe (:nonrecursive t))
+;; (package! gptel :recipe (:nonrecursive t))
+
+;; (package! typescript-mode)
+;; (package! prettier-js)
