@@ -196,10 +196,34 @@
 (set-default-coding-systems 'utf-8-unix)
 (set-selection-coding-system 'utf-8)
 (set-clipboard-coding-system 'utf-8)
+(setq select-enable-clipboard t)
 (setq-default buffer-file-coding-system 'utf-8-unix)
+
+(when (and (eq system-type 'gnu/linux)
+           (getenv "WAYLAND_DISPLAY")
+           (executable-find "wl-copy")
+           (executable-find "wl-paste"))
+  (defun my/wl-copy-text (text)
+    (let ((coding-system-for-write 'utf-8-unix)
+          (process-connection-type nil))
+      (with-temp-buffer
+        (insert text)
+        (call-process-region
+         (point-min) (point-max)
+         "wl-copy" nil 0 nil
+         "--type" "text/plain;charset=utf-8"))))
+
+  (defun my/wl-paste-text ()
+    (let ((coding-system-for-read 'utf-8-unix)
+          (process-connection-type nil))
+      (with-temp-buffer
+        (when (zerop (call-process "wl-paste" nil t nil "--no-newline"))
+          (buffer-string)))))
+
+  (setq interprogram-cut-function #'my/wl-copy-text
+        interprogram-paste-function #'my/wl-paste-text))
 
 ;; Forge configuration
 ;; Remember to create a GitHub token and add it to ~/.authinfo or ~/.authinfo.gpg:
 ;; machine api.github.com login <your-github-username>^forge password <your-token>
 (setq auth-sources '("~/.authinfo"))
-
