@@ -83,7 +83,6 @@
 
 (package! exec-path-from-shell)
 
-;; (package! gptel :recipe (:nonrecursive t))
-
-;; (package! typescript-mode)
-;; (package! prettier-js)
+(package! gptel :recipe (:nonrecursive t))
+(package! typescript-mode)
+(package! prettier-js)

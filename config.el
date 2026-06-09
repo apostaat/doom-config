@@ -227,3 +227,30 @@
 ;; Remember to create a GitHub token and add it to ~/.authinfo or ~/.authinfo.gpg:
 ;; machine api.github.com login <your-github-username>^forge password <your-token>
 (setq auth-sources '("~/.authinfo"))
+
+;; Ollama context window (token budget for each request)
+(defvar my/ollama-max-context-tokens 131072
+  "Maximum context window (in tokens) to request from local Ollama models.")
+
+(setenv "OLLAMA_CONTEXT_LENGTH" (number-to-string my/ollama-max-context-tokens))
+(setenv "OLLAMA_NUM_CTX" (number-to-string my/ollama-max-context-tokens))
+
+;; GPTel + Ollama
+(defvar my/ollama-host
+  (replace-regexp-in-string "^https?://" ""
+                        (or (getenv "OLLAMA_HOST") "localhost:11434")))
+
+(after! gptel
+  (setq gptel-model "deepseek-r1:32b")
+  (setq gptel-backend
+        (gptel-make-ollama
+         "Ollama"
+         :host my/ollama-host
+         :stream t
+         :models '("deepseek-r1:32b"))))
+
+(load! "lisp/agent-tdd-workflow.el")
+
+;; Agent TDD workflow defaults
+(setq agent-tdd-codex-command "codex")
+(setq agent-tdd-default-test-command "make test")
