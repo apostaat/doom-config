@@ -17,13 +17,13 @@
 (defcustom agent-tdd-ollama-default-home (or (getenv "OLLAMA_HOME") nil)
   "Default HOME for the Emacs-launched Ollama server process."
   :type '(choice (const :tag "Inherit current env" nil)
-                (string :tag "Explicit HOME"))
+          (string :tag "Explicit HOME"))
   :group 'agent-tdd-workflow)
 
 (defcustom agent-tdd-ollama-default-models (or (getenv "OLLAMA_MODELS") nil)
   "Default OLLAMA_MODELS for the Emacs-launched Ollama server process."
   :type '(choice (const :tag "Inherit current env" nil)
-                (string :tag "Explicit OLLAMA_MODELS"))
+          (string :tag "Explicit OLLAMA_MODELS"))
   :group 'agent-tdd-workflow)
 
 (defvar agent-tdd-ollama-binary "ollama"
@@ -56,7 +56,7 @@ If REQUESTED-MODELS is provided, prefer it."
       (and requested-home
            (agent-tdd--ensure-ollama-directory (expand-file-name "models" requested-home)))
       (agent-tdd--ensure-ollama-directory (and (getenv "OLLAMA_MODELS")
-                                              (expand-file-name (getenv "OLLAMA_MODELS"))))
+                                               (expand-file-name (getenv "OLLAMA_MODELS"))))
       (agent-tdd--ensure-ollama-directory "/tmp/ollama/models")))
 
 (defvar agent-tdd--ollama-server-process nil
@@ -105,7 +105,9 @@ If REQUESTED-MODELS is provided, prefer it."
   :type 'string
   :group 'agent-tdd-workflow)
 
-(defcustom agent-tdd-ollama-context-window 131072
+(defcustom agent-tdd-ollama-context-window
+  (or (and (boundp 'my/ollama-max-context-tokens) my/ollama-max-context-tokens)
+      (string-to-number (or (getenv "OLLAMA_NUM_CTX") "131072")))
   "Context window (num_ctx) passed to Ollama for each request."
   :type 'integer
   :group 'agent-tdd-workflow)
@@ -135,7 +137,7 @@ Usually overridden per repository."
   "Shell command for codex-cli (for example: \"codex\").
 Must read prompt from stdin."
   :type '(choice (const :tag "Disabled" nil)
-                 (string :tag "Command"))
+          (string :tag "Command"))
   :group 'agent-tdd-workflow)
 
 (defvar agent-tdd--session-buffer "*agent-tdd-session*")
@@ -154,7 +156,7 @@ If MODELS-PATH is non-nil, sets OLLAMA_MODELS for this process."
                (process-name agent-tdd--ollama-server-process))
     (let* ((host-final (or host agent-tdd-ollama-host))
            (home-final (or (agent-tdd--default-ollama-home home-path)
-                          (and (getenv "HOME") (expand-file-name ".ollama" (getenv "HOME")))))
+                           (and (getenv "HOME") (expand-file-name ".ollama" (getenv "HOME")))))
            (models-final (agent-tdd--default-ollama-models models-path home-final))
            (buf-serve-buffer (get-buffer-create "*agent-tdd-ollama-server*")))
       (let ((process-environment (copy-sequence process-environment))
@@ -203,7 +205,7 @@ If MODELS-PATH is non-nil, sets OLLAMA_MODELS for this process."
 
 (defun agent-tdd--session-dir ()
   (expand-file-name (concat (file-name-as-directory (agent-tdd--project-root))
-                           agent-tdd-project-log-dir "/")))
+                            agent-tdd-project-log-dir "/")))
 
 (defun agent-tdd--ensure-session-dir ()
   (let ((dir (agent-tdd--session-dir)))
@@ -286,8 +288,8 @@ If MODELS-PATH is non-nil, sets OLLAMA_MODELS for this process."
                       (or (assoc-default "response" command-json nil #'string=)
                           (assoc-default 'response command-json))))
            (err (and command-json
-                      (or (assoc-default "error" command-json nil #'string=)
-                          (assoc-default 'error command-json)))))
+                     (or (assoc-default "error" command-json nil #'string=)
+                         (assoc-default 'error command-json)))))
       (cond
        (content content)
        (thinking thinking)
@@ -303,6 +305,8 @@ If MODELS-PATH is non-nil, sets OLLAMA_MODELS for this process."
   (let* ((tmp (make-temp-file "agent-tdd-prompt-"))
          (buf (get-buffer-create " *agent-tdd-codex*"))
          (default-directory (file-name-as-directory (agent-tdd--project-root)))
+         (process-environment (cons (format "OLLAMA_NUM_CTX=%s" agent-tdd-ollama-context-window)
+                                    process-environment))
          (cmd (format "%s < %s" command (shell-quote-argument tmp)))
          (status 0))
     (unwind-protect
@@ -431,44 +435,44 @@ TDD roles are separate and sequential."
         (agent-tdd--log session-file "Test Designer" tests)
         (agent-tdd--append-console "[test-designer] done")
         (let* ((coder-data (agent-tdd--run-step-with-codex 'coder task architect tests language
-                                                          "Do not modify tests."))
+                                                           "Do not modify tests."))
                (coder-deepseek (nth 0 coder-data))
                (coder-codex (nth 1 coder-data))
                (coder-diff (nth 2 coder-data)))
           (agent-tdd--log session-file "Codex Implementation"
-                           (format "DeepSeek:\n%s\n\nCodex:\n%s\n\n%s"
-                                   coder-deepseek coder-codex coder-diff))
+                          (format "DeepSeek:\n%s\n\nCodex:\n%s\n\n%s"
+                                  coder-deepseek coder-codex coder-diff))
           (cl-loop for i from 1 to max-iters do
-            (let* ((tests-result (agent-tdd--run-tests test-cmd))
-                   (status (plist-get tests-result :status))
-                   (output (plist-get tests-result :output)))
-              (agent-tdd--log session-file (format "Test run #%d" i) output)
-              (agent-tdd--append-console "[tests #%d] exit=%d" i status)
-              (if (= status 0)
-                  (progn
-                    (setq passed t)
-                    (cl-return))
-                (let* ((analysis (agent-tdd--deepseek 'failure-analyst task architect tests
-                                                      language
-                                                      (format "status=%d\n%s" status output)))
-                       (fix-data (agent-tdd--run-step-with-codex 'fixer task architect tests language
-                                                                 (format "Failure output:\n%s\n\nAnalysis:\n%s"
-                                                                         output analysis)))
-                       (fixer-output (nth 0 fix-data))
-                       (fixer-codex (nth 1 fix-data))
-                       (fixer-diff (nth 2 fix-data)))
-                  (agent-tdd--log session-file
-                                   (format "Iteration %d: Failure Analyst + Fixer" i)
-                                   (format "Failure Analyst:\n%s\n\nFixer DeepSeek:\n%s\n\nFixer Codex:\n%s\n\n%s"
-                                           analysis fixer-output fixer-codex fixer-diff))))))))
-        (if passed
-            (progn
-              (agent-tdd--log session-file "Result" "PASS: tests green.")
-              (agent-tdd--append-console "Result: PASS")
-              (message "agent-tdd: tests are green. %s" session-file))
-          (agent-tdd--log session-file "Result" (format "FAIL after %d iterations." max-iters))
-          (agent-tdd--append-console "Result: FAIL")
-          (message "agent-tdd: tests still failing. %s" session-file)))))
+                   (let* ((tests-result (agent-tdd--run-tests test-cmd))
+                          (status (plist-get tests-result :status))
+                          (output (plist-get tests-result :output)))
+                     (agent-tdd--log session-file (format "Test run #%d" i) output)
+                     (agent-tdd--append-console "[tests #%d] exit=%d" i status)
+                     (if (= status 0)
+                         (progn
+                           (setq passed t)
+                           (cl-return))
+                       (let* ((analysis (agent-tdd--deepseek 'failure-analyst task architect tests
+                                                             language
+                                                             (format "status=%d\n%s" status output)))
+                              (fix-data (agent-tdd--run-step-with-codex 'fixer task architect tests language
+                                                                        (format "Failure output:\n%s\n\nAnalysis:\n%s"
+                                                                                output analysis)))
+                              (fixer-output (nth 0 fix-data))
+                              (fixer-codex (nth 1 fix-data))
+                              (fixer-diff (nth 2 fix-data)))
+                         (agent-tdd--log session-file
+                                         (format "Iteration %d: Failure Analyst + Fixer" i)
+                                         (format "Failure Analyst:\n%s\n\nFixer DeepSeek:\n%s\n\nFixer Codex:\n%s\n\n%s"
+                                                 analysis fixer-output fixer-codex fixer-diff))))))))
+      (if passed
+          (progn
+            (agent-tdd--log session-file "Result" "PASS: tests green.")
+            (agent-tdd--append-console "Result: PASS")
+            (message "agent-tdd: tests are green. %s" session-file))
+        (agent-tdd--log session-file "Result" (format "FAIL after %d iterations." max-iters))
+        (agent-tdd--append-console "Result: FAIL")
+        (message "agent-tdd: tests still failing. %s" session-file)))))
 
 (defun agent-tdd-open-wizard ()
   "Open wizard-like workflow buffer with session metadata and run button."
@@ -483,34 +487,34 @@ TDD roles are separate and sequential."
       (insert "Language: agnostic\n\n")
       (insert "Press C-c C-c to start, q to quit.\n")
       (use-local-map (let ((map (make-sparse-keymap)))
-                      (define-key map (kbd "C-c C-c")
-                        (lambda ()
-                          (interactive)
-                          (let* ((task (string-trim (save-excursion
-                                                     (goto-char (point-min))
-                                                     (search-forward "Task: " nil t)
-                                                     (buffer-substring-no-properties (point) (line-end-position)))))
-                                 (test-cmd (string-trim (save-excursion
-                                                         (search-forward "Test command: " nil t)
-                                                         (buffer-substring-no-properties (point) (line-end-position)))))
-                                 (iter-line (save-excursion
-                                             (search-forward "Max fix iterations: " nil t)
-                                             (string-trim (buffer-substring-no-properties (point) (line-end-position)))))
-                                 (language (save-excursion
-                                            (search-forward "Language: " nil t)
-                                            (buffer-substring-no-properties (point) (line-end-position))))
-                                 (test-cmd-final (if (string-empty-p test-cmd)
-                                                     agent-tdd-default-test-command
-                                                   test-cmd))
-                                 (iters (if (string-empty-p iter-line)
-                                            agent-tdd-max-fix-iterations
-                                          (string-to-number iter-line))))
-                            (if (string-empty-p task)
-                                (message "Task is required")
-                              (agent-tdd-start task test-cmd-final iters language))))
-                        )
-                      (define-key map (kbd "q") #'(lambda () (interactive) (kill-buffer)))
-                      map))
+                       (define-key map (kbd "C-c C-c")
+                                   (lambda ()
+                                     (interactive)
+                                     (let* ((task (string-trim (save-excursion
+                                                                 (goto-char (point-min))
+                                                                 (search-forward "Task: " nil t)
+                                                                 (buffer-substring-no-properties (point) (line-end-position)))))
+                                            (test-cmd (string-trim (save-excursion
+                                                                     (search-forward "Test command: " nil t)
+                                                                     (buffer-substring-no-properties (point) (line-end-position)))))
+                                            (iter-line (save-excursion
+                                                         (search-forward "Max fix iterations: " nil t)
+                                                         (string-trim (buffer-substring-no-properties (point) (line-end-position)))))
+                                            (language (save-excursion
+                                                        (search-forward "Language: " nil t)
+                                                        (buffer-substring-no-properties (point) (line-end-position))))
+                                            (test-cmd-final (if (string-empty-p test-cmd)
+                                                                agent-tdd-default-test-command
+                                                              test-cmd))
+                                            (iters (if (string-empty-p iter-line)
+                                                       agent-tdd-max-fix-iterations
+                                                     (string-to-number iter-line))))
+                                       (if (string-empty-p task)
+                                           (message "Task is required")
+                                         (agent-tdd-start task test-cmd-final iters language))))
+                                   )
+                       (define-key map (kbd "q") #'(lambda () (interactive) (kill-buffer)))
+                       map))
       (agent-tdd-console-mode)
       (goto-char (point-min)))
     (display-buffer buf)))
@@ -554,23 +558,23 @@ TDD roles are separate and sequential."
           (define-key a-map (kbd "t") #'agent-tdd-start)
           (define-key a-map (kbd "w") #'agent-tdd-open-wizard)
           (define-key a-map (kbd "v")
-            #'(lambda ()
-                (interactive)
-                (let* ((dir (agent-tdd--ensure-session-dir))
-                       (files (directory-files dir t "session-.*\\.org$" t)))
-                  (if files
-                      (find-file (car (last files)))
-                    (message "No agent sessions yet in %s" dir)))))
+                      #'(lambda ()
+                          (interactive)
+                          (let* ((dir (agent-tdd--ensure-session-dir))
+                                 (files (directory-files dir t "session-.*\\.org$" t)))
+                            (if files
+                                (find-file (car (last files)))
+                              (message "No agent sessions yet in %s" dir)))))
           (when (and (boundp 'which-key-mode) which-key-mode)
             (which-key-add-key-based-replacements
-             (format "%s a" leader-key) "agent"
-             (format "%s a o" leader-key) "ollama")))
+              (format "%s a" leader-key) "agent"
+              (format "%s a o" leader-key) "ollama")))
         (define-key agent-tdd-ollama-ollama-map (kbd "s") #'agent-tdd-ollama-start-server)
         (define-key agent-tdd-ollama-ollama-map (kbd "p") #'agent-tdd-ollama-stop-server)
         (when (and (boundp 'which-key-mode) which-key-mode)
           (which-key-add-key-based-replacements
-           (format "%s a o s" leader-key) "Start Ollama server"
-           (format "%s a o p" leader-key) "Stop Ollama server"))
+            (format "%s a o s" leader-key) "Start Ollama server"
+            (format "%s a o p" leader-key) "Stop Ollama server"))
         t))))
 
 (add-hook 'after-init-hook #'agent-tdd-ensure-shortcuts-fallback)

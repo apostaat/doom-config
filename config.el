@@ -241,6 +241,7 @@
                         (or (getenv "OLLAMA_HOST") "localhost:11434")))
 
 (after! gptel
+  (setq gptel-ollama-options `(("num_ctx" . ,my/ollama-max-context-tokens)))
   (setq gptel-model "deepseek-r1:32b")
   (setq gptel-backend
         (gptel-make-ollama
