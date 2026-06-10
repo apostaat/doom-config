@@ -83,6 +83,6 @@
 
 (package! exec-path-from-shell)
 
-(package! gptel :recipe (:nonrecursive t))
+(package! eca :recipe (:host github :repo "editor-code-assistant/eca-emacs" :files ("*.el")))
 (package! typescript-mode)
 (package! prettier-js)

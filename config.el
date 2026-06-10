@@ -235,20 +235,94 @@
 (setenv "OLLAMA_CONTEXT_LENGTH" (number-to-string my/ollama-max-context-tokens))
 (setenv "OLLAMA_NUM_CTX" (number-to-string my/ollama-max-context-tokens))
 
-;; GPTel + Ollama
-(defvar my/ollama-host
-  (replace-regexp-in-string "^https?://" ""
-                        (or (getenv "OLLAMA_HOST") "localhost:11434")))
+;; ECA + local Ollama
+(defvar my/eca-ollama-host
+  (let ((host (or (getenv "OLLAMA_HOST") "http://localhost:11434")))
+    (if (or (string-prefix-p "http://" host) (string-prefix-p "https://" host))
+        host
+      (concat "http://" host))))
 
-(after! gptel
-  (setq gptel-ollama-options `(("num_ctx" . ,my/ollama-max-context-tokens)))
-  (setq gptel-model "deepseek-r1:32b")
-  (setq gptel-backend
-        (gptel-make-ollama
-         "Ollama"
-         :host my/ollama-host
-         :stream t
-         :models '("deepseek-r1:32b"))))
+(defvar my/eca-ollama-model "deepseek-r1:32b")
+(defvar my/eca-ollama-process nil
+  "Process object for local `ollama serve' started from Emacs.")
+
+(defun my/eca-ollama-running-p ()
+  "Return non-nil when local Ollama API responds."
+  (and (executable-find "curl")
+       (zerop (call-process "curl" nil nil nil
+                            "-fsS"
+                            (concat my/eca-ollama-host "/api/tags")))))
+
+(defun my/eca-start-ollama-server ()
+  "Start local Ollama server in background if it is not running."
+  (interactive)
+  (if my/eca-ollama-running-p
+      (message "Ollama is already running at %s" my/eca-ollama-host)
+    (unless (executable-find "ollama")
+      (user-error "Ollama executable not found"))
+    (when (process-live-p my/eca-ollama-process)
+      (delete-process my/eca-ollama-process))
+    (let ((process-environment (cons (format "OLLAMA_HOST=%s" my/eca-ollama-host)
+                                    process-environment)))
+      (setq my/eca-ollama-process
+            (start-process
+             "eca-ollama"
+             " *eca-ollama-server*"
+             (executable-find "ollama")
+             "serve")))
+    (message "Starting Ollama: %s" my/eca-ollama-host)
+    (run-at-time "0.8 sec" nil
+                 (lambda ()
+                   (message (if (my/eca-ollama-running-p)
+                                "Ollama server started."
+                                "Ollama server didn't become available yet. Check `*eca-ollama-server*`."))))))
+
+(defun my/eca-stop-ollama-server ()
+  "Stop local Ollama server started by `my/eca-start-ollama-server`."
+  (interactive)
+  (if (and my/eca-ollama-process (process-live-p my/eca-ollama-process))
+      (progn
+        (delete-process my/eca-ollama-process)
+        (setq my/eca-ollama-process nil)
+        (message "Ollama server process stopped."))
+    (message "No managed Ollama process found in Emacs.")))
+
+(defun my/eca-chat-with-ollama ()
+  "Start Ollama if needed and launch ECA chat."
+  (interactive)
+  (unless (my/eca-ollama-running-p)
+    (my/eca-start-ollama-server))
+  (eca))
+
+(after! eca
+  (setenv "OLLAMA_HOST" my/eca-ollama-host)
+  (setenv "OLLAMA_CONTEXT_LENGTH" (number-to-string my/ollama-max-context-tokens))
+  (setenv "OLLAMA_NUM_CTX" (number-to-string my/ollama-max-context-tokens))
+  (setq eca-chat-use-side-window t
+        eca-chat-window-side 'right
+        eca-chat-window-width 80
+        eca-chat-focus-on-open t
+        eca-chat-custom-model my/eca-ollama-model
+        eca-completion-idle-delay 0.15)
+  (when (boundp 'doom-leader-map)
+    (define-key doom-leader-map (kbd "a e") #'my/eca-chat-with-ollama)
+    (define-key doom-leader-map (kbd "a O") #'my/eca-start-ollama-server)
+    (define-key doom-leader-map (kbd "a x") #'my/eca-stop-ollama-server)
+    (define-key doom-leader-map (kbd "a s") #'eca-stop)
+    (define-key doom-leader-map (kbd "a r") #'eca-restart)
+    (define-key doom-leader-map (kbd "a w") #'eca-chat-toggle-window)
+    (define-key doom-leader-map (kbd "a c") #'eca-switch-to-chat)
+    (define-key doom-leader-map (kbd "a p") #'eca-switch-to-project-chat)
+    (define-key doom-leader-map (kbd "a n") #'eca-chat-new)
+    (define-key doom-leader-map (kbd "a m") #'eca-chat-select-model)
+    (define-key doom-leader-map (kbd "a a") #'eca-chat-select-agent)
+    (define-key doom-leader-map (kbd "a t") #'eca-chat-send-prompt-at-chat)
+    (define-key doom-leader-map (kbd "a R") #'eca-chat-reset)
+    (define-key doom-leader-map (kbd "a C") #'eca-chat-clear)
+    (define-key doom-leader-map (kbd "a g") #'eca-workspaces)
+    (define-key doom-leader-map (kbd "a S") #'eca-settings)
+    (define-key doom-leader-map (kbd "a o") #'eca-open-global-config)))
+
 
 (load! "lisp/agent-tdd-workflow.el")
 
