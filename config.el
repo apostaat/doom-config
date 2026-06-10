@@ -246,6 +246,38 @@
 (defvar my/eca-ollama-process nil
   "Process object for local `ollama serve' started from Emacs.")
 
+(defun my/eca-ollama-installed-models ()
+  "Return local Ollama model names from `ollama list`.
+If the command is unavailable or no models are installed, return nil."
+  (when (executable-find "ollama")
+    (let ((lines (cdr (split-string (string-trim (shell-command-to-string "ollama list 2>/dev/null")) "\n" t)))
+          (models '()))
+      (dolist (line lines)
+        (let ((name (car (split-string line " " t))))
+          (unless (string-empty-p name)
+            (setq models (cons name models)))))
+      (nreverse models))))
+
+(defun my/eca--ollama-base-model (model)
+  (if (string-match "^.+/\\(.+\\)$" model)
+      (match-string 1 model)
+    model))
+
+(defun my/eca-set-ollama-model-from-installed ()
+  "Set `my/eca-ollama-model` to a local Ollama model and refresh ECA config."
+  (interactive)
+  (let* ((models (my/eca-ollama-installed-models))
+         (selection (if (and models (= 1 (length models)))
+                        (car models)
+                      (completing-read "Select Ollama model: " models nil t))))
+    (unless models
+      (user-error "No local Ollama models available"))
+    (unless selection
+      (user-error "No local Ollama model selected"))
+    (setq my/eca-ollama-model (my/eca--ollama-base-model selection))
+    (setq eca-chat-custom-model my/eca-ollama-model)
+    (message "ECA model set to %s" my/eca-ollama-model)))
+
 (defun my/eca-ollama-running-p ()
   "Return non-nil when local Ollama API responds."
   (and (executable-find "curl")
@@ -320,6 +352,17 @@
   (setenv "OLLAMA_HOST" my/eca-ollama-host)
   (setenv "OLLAMA_CONTEXT_LENGTH" (number-to-string my/ollama-max-context-tokens))
   (setenv "OLLAMA_NUM_CTX" (number-to-string my/ollama-max-context-tokens))
+    (let* ((installed (my/eca-ollama-installed-models))
+         (installed-base (my/eca--ollama-base-model my/eca-ollama-model))
+         (matched (and installed (member installed-base installed))))
+    (unless matched
+      (if (and installed (= 1 (length installed)))
+          (progn
+            (setq my/eca-ollama-model (car installed))
+            (setq eca-chat-custom-model my/eca-ollama-model)
+            (message "ECA model auto-set from installed Ollama model: %s" my/eca-ollama-model))
+        (when installed
+          (message "ECA model %S not found among local models: %S" my/eca-ollama-model installed)))))
   (setq eca-chat-use-side-window t
         eca-chat-window-side 'right
         eca-chat-window-width 80
@@ -338,6 +381,7 @@ This prints:
 2. Current `my/eca-ollama-model`.
 3. Current `OLLAMA_HOST` value.
 4. Whether `ollama` endpoint responds.
+5. Local Ollama models discovered in this session.
 "
 (interactive)
   (let ((expected (list (cons (kbd "a e") #'my/eca-chat-with-ollama)
@@ -354,6 +398,7 @@ This prints:
                    :model my/eca-ollama-model
                    :ollama-host (getenv "OLLAMA_HOST")
                    :ollama-live (my/eca-ollama-running-p)
+                   :installed-models (my/eca-ollama-installed-models)
                    :bindings
                    (mapcar
                     (lambda (item)
