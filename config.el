@@ -242,6 +242,14 @@
         host
       (concat "http://" host))))
 
+(defvar my/eca-ollama-api-base
+  (replace-regexp-in-string "/+$" "" my/eca-ollama-host)
+  "Base host URL used by Ollama server (without trailing slash).")
+
+(defvar my/eca-ollama-api-url
+  (concat (replace-regexp-in-string "/+$" "" my/eca-ollama-host) "/v1")
+  "OpenAI-compatible base URL for ECA provider config (without trailing slash).")
+
 (defvar my/eca-ollama-model "deepseek-r1:32b")
 (defvar my/eca-ollama-process nil
   "Process object for local `ollama serve' started from Emacs.")
@@ -361,6 +369,8 @@ If the command is unavailable or no models are installed, return nil."
 
 (after! eca
   (setenv "OLLAMA_HOST" my/eca-ollama-host)
+  (setenv "OLLAMA_API_BASE" my/eca-ollama-api-base)
+  (setenv "OLLAMA_API_URL" my/eca-ollama-api-url)
   (setenv "OLLAMA_CONTEXT_LENGTH" (number-to-string my/ollama-max-context-tokens))
   (setenv "OLLAMA_NUM_CTX" (number-to-string my/ollama-max-context-tokens))
   (let* ((installed (my/eca-ollama-installed-models))
@@ -434,5 +444,3 @@ This prints:
                    (plist-get bind :current)
                    (plist-get bind :status)))
         report))))
-
-
