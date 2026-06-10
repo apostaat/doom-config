@@ -256,7 +256,7 @@
 (defun my/eca-start-ollama-server ()
   "Start local Ollama server in background if it is not running."
   (interactive)
-  (if my/eca-ollama-running-p
+  (if (my/eca-ollama-running-p)
       (message "Ollama is already running at %s" my/eca-ollama-host)
     (unless (executable-find "ollama")
       (user-error "Ollama executable not found"))
@@ -294,6 +294,28 @@
     (my/eca-start-ollama-server))
   (eca))
 
+(defun my/eca-install-leader-binds ()
+  "Force ECA keybinds under `doom-leader-map`."
+  (when (boundp 'doom-leader-map)
+    (map! :leader
+          :prefix ("a" . "ECA")
+          :desc "ECA: start chat/session (with Ollama)" "e" #'my/eca-chat-with-ollama
+          :desc "ECA: start server" "O" #'my/eca-start-ollama-server
+          :desc "ECA: stop server" "x" #'my/eca-stop-ollama-server
+          :desc "ECA: stop" "s" #'eca-stop
+          :desc "ECA: restart" "r" #'eca-restart
+          :desc "ECA: toggle chat window" "w" #'eca-chat-toggle-window
+          :desc "ECA: switch chat" "c" #'eca-switch-to-chat
+          :desc "ECA: switch project chat" "p" #'eca-switch-to-project-chat
+          :desc "ECA: new chat" "n" #'eca-chat-new
+          :desc "ECA: select model" "m" #'eca-chat-select-model
+          :desc "ECA: select agent" "a" #'eca-chat-select-agent
+          :desc "ECA: reset chat" "R" #'eca-chat-reset
+          :desc "ECA: clear chat" "C" #'eca-chat-clear
+          :desc "ECA: workspaces" "g" #'eca-workspaces
+          :desc "ECA: settings" "S" #'eca-settings
+          :desc "ECA: open global config" "o" #'eca-open-global-config)))
+
 (after! eca
   (setenv "OLLAMA_HOST" my/eca-ollama-host)
   (setenv "OLLAMA_CONTEXT_LENGTH" (number-to-string my/ollama-max-context-tokens))
@@ -304,24 +326,58 @@
         eca-chat-focus-on-open t
         eca-chat-custom-model my/eca-ollama-model
         eca-completion-idle-delay 0.15)
-  (when (boundp 'doom-leader-map)
-    (define-key doom-leader-map (kbd "a e") #'my/eca-chat-with-ollama)
-    (define-key doom-leader-map (kbd "a O") #'my/eca-start-ollama-server)
-    (define-key doom-leader-map (kbd "a x") #'my/eca-stop-ollama-server)
-    (define-key doom-leader-map (kbd "a s") #'eca-stop)
-    (define-key doom-leader-map (kbd "a r") #'eca-restart)
-    (define-key doom-leader-map (kbd "a w") #'eca-chat-toggle-window)
-    (define-key doom-leader-map (kbd "a c") #'eca-switch-to-chat)
-    (define-key doom-leader-map (kbd "a p") #'eca-switch-to-project-chat)
-    (define-key doom-leader-map (kbd "a n") #'eca-chat-new)
-    (define-key doom-leader-map (kbd "a m") #'eca-chat-select-model)
-    (define-key doom-leader-map (kbd "a a") #'eca-chat-select-agent)
-    (define-key doom-leader-map (kbd "a t") #'eca-chat-send-prompt-at-chat)
-    (define-key doom-leader-map (kbd "a R") #'eca-chat-reset)
-    (define-key doom-leader-map (kbd "a C") #'eca-chat-clear)
-    (define-key doom-leader-map (kbd "a g") #'eca-workspaces)
-    (define-key doom-leader-map (kbd "a S") #'eca-settings)
-    (define-key doom-leader-map (kbd "a o") #'eca-open-global-config)))
+  (my/eca-install-leader-binds))
+
+(add-hook 'doom-after-init-hook #'my/eca-install-leader-binds)
+
+(defun my/eca-verify-runtime ()
+  "Show ECA + Doom binding/runtime status in *Messages*.
+
+This prints:
+1. Which commands are bound to `SPC a e`, `SPC a O`, `SPC a x`.
+2. Current `my/eca-ollama-model`.
+3. Current `OLLAMA_HOST` value.
+4. Whether `ollama` endpoint responds.
+"
+(interactive)
+  (let ((expected (list (cons (kbd "a e") #'my/eca-chat-with-ollama)
+                        (cons (kbd "a O") #'my/eca-start-ollama-server)
+                        (cons (kbd "a x") #'my/eca-stop-ollama-server))))
+    (if (not (boundp 'doom-leader-map))
+        (if (called-interactively-p 'interactive)
+            (user-error "doom-leader-map is not initialized yet (run after Doom startup)")
+          (error "doom-leader-map is not initialized yet (run after Doom startup)"))
+      (my/eca-install-leader-binds)
+      (let ((report
+             (list :ok t
+                   :prefix "SPC a"
+                   :model my/eca-ollama-model
+                   :ollama-host (getenv "OLLAMA_HOST")
+                   :ollama-live (my/eca-ollama-running-p)
+                   :bindings
+                   (mapcar
+                    (lambda (item)
+                      (let* ((key (car item))
+                             (expected-cmd (cdr item))
+                             (current (lookup-key doom-leader-map key))
+                             (status (eq current expected-cmd)))
+                        (list :key (key-description key)
+                              :expected expected-cmd
+                              :current current
+                              :status (if status "ok" "overridden"))))
+                    expected))))
+        (message "ECA keybinds (SPC a ...): e=%S O=%S x=%S"
+                 (where-is-internal 'my/eca-chat-with-ollama doom-leader-map nil t)
+                 (where-is-internal 'my/eca-start-ollama-server doom-leader-map nil t)
+                 (where-is-internal 'my/eca-stop-ollama-server doom-leader-map nil t))
+        (message "ECA model=%S ollama-host=%S" my/eca-ollama-model (getenv "OLLAMA_HOST"))
+        (message "ollama endpoint: %s" (if (plist-get report :ollama-live) "live" "not reachable"))
+        (dolist (bind (plist-get report :bindings))
+          (message "SPC %S -> %S (%s)"
+                   (plist-get bind :key)
+                   (plist-get bind :current)
+                   (plist-get bind :status)))
+        report))))
 
 
 (load! "lisp/agent-tdd-workflow.el")
