@@ -295,7 +295,7 @@ If the command is unavailable or no models are installed, return nil."
     (when (process-live-p my/eca-ollama-process)
       (delete-process my/eca-ollama-process))
     (let ((process-environment (cons (format "OLLAMA_HOST=%s" my/eca-ollama-host)
-                                    process-environment)))
+                                     process-environment)))
       (setq my/eca-ollama-process
             (start-process
              "eca-ollama"
@@ -307,7 +307,7 @@ If the command is unavailable or no models are installed, return nil."
                  (lambda ()
                    (message (if (my/eca-ollama-running-p)
                                 "Ollama server started."
-                                "Ollama server didn't become available yet. Check `*eca-ollama-server*`."))))))
+                              "Ollama server didn't become available yet. Check `*eca-ollama-server*`."))))))
 
 (defun my/eca-stop-ollama-server ()
   "Stop local Ollama server started by `my/eca-start-ollama-server`."
@@ -326,33 +326,44 @@ If the command is unavailable or no models are installed, return nil."
     (my/eca-start-ollama-server))
   (eca))
 
+(defun my/eca-ensure-leader-a-prefix ()
+  "Ensure `doom-leader-map` has a keymap at `a` and return it."
+  (let ((current (lookup-key doom-leader-map (kbd "a"))))
+    (cond
+     ((keymapp current) current)
+     (t
+      (let ((prefix (make-sparse-keymap)))
+        (define-key doom-leader-map (kbd "a") prefix)
+        (when current
+          (define-key prefix (kbd "a") current))
+        prefix)))))
+
 (defun my/eca-install-leader-binds ()
-  "Force ECA keybinds under `doom-leader-map`."
+  "Force ECA keybinds under `SPC a` safely."
   (when (boundp 'doom-leader-map)
-    (map! :leader
-          :prefix ("a" . "ECA")
-          :desc "ECA: start chat/session (with Ollama)" "e" #'my/eca-chat-with-ollama
-          :desc "ECA: start server" "O" #'my/eca-start-ollama-server
-          :desc "ECA: stop server" "x" #'my/eca-stop-ollama-server
-          :desc "ECA: stop" "s" #'eca-stop
-          :desc "ECA: restart" "r" #'eca-restart
-          :desc "ECA: toggle chat window" "w" #'eca-chat-toggle-window
-          :desc "ECA: switch chat" "c" #'eca-switch-to-chat
-          :desc "ECA: switch project chat" "p" #'eca-switch-to-project-chat
-          :desc "ECA: new chat" "n" #'eca-chat-new
-          :desc "ECA: select model" "m" #'eca-chat-select-model
-          :desc "ECA: select agent" "a" #'eca-chat-select-agent
-          :desc "ECA: reset chat" "R" #'eca-chat-reset
-          :desc "ECA: clear chat" "C" #'eca-chat-clear
-          :desc "ECA: workspaces" "g" #'eca-workspaces
-          :desc "ECA: settings" "S" #'eca-settings
-          :desc "ECA: open global config" "o" #'eca-open-global-config)))
+    (let ((a-map (my/eca-ensure-leader-a-prefix)))
+      (define-key a-map (kbd "e") #'my/eca-chat-with-ollama)
+      (define-key a-map (kbd "O") #'my/eca-start-ollama-server)
+      (define-key a-map (kbd "x") #'my/eca-stop-ollama-server)
+      (define-key a-map (kbd "s") #'eca-stop)
+      (define-key a-map (kbd "r") #'eca-restart)
+      (define-key a-map (kbd "w") #'eca-chat-toggle-window)
+      (define-key a-map (kbd "c") #'eca-switch-to-chat)
+      (define-key a-map (kbd "p") #'eca-switch-to-project-chat)
+      (define-key a-map (kbd "n") #'eca-chat-new)
+      (define-key a-map (kbd "m") #'eca-chat-select-model)
+      (define-key a-map (kbd "a") #'eca-chat-select-agent)
+      (define-key a-map (kbd "R") #'eca-chat-reset)
+      (define-key a-map (kbd "C") #'eca-chat-clear)
+      (define-key a-map (kbd "g") #'eca-workspaces)
+      (define-key a-map (kbd "S") #'eca-settings)
+      (define-key a-map (kbd "o") #'eca-open-global-config))))
 
 (after! eca
   (setenv "OLLAMA_HOST" my/eca-ollama-host)
   (setenv "OLLAMA_CONTEXT_LENGTH" (number-to-string my/ollama-max-context-tokens))
   (setenv "OLLAMA_NUM_CTX" (number-to-string my/ollama-max-context-tokens))
-    (let* ((installed (my/eca-ollama-installed-models))
+  (let* ((installed (my/eca-ollama-installed-models))
          (installed-base (my/eca--ollama-base-model my/eca-ollama-model))
          (matched (and installed (member installed-base installed))))
     (unless matched
@@ -383,7 +394,7 @@ This prints:
 4. Whether `ollama` endpoint responds.
 5. Local Ollama models discovered in this session.
 "
-(interactive)
+  (interactive)
   (let ((expected (list (cons (kbd "a e") #'my/eca-chat-with-ollama)
                         (cons (kbd "a O") #'my/eca-start-ollama-server)
                         (cons (kbd "a x") #'my/eca-stop-ollama-server))))
@@ -425,8 +436,3 @@ This prints:
         report))))
 
 
-(load! "lisp/agent-tdd-workflow.el")
-
-;; Agent TDD workflow defaults
-(setq agent-tdd-codex-command "codex")
-(setq agent-tdd-default-test-command "make test")
