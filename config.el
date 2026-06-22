@@ -33,7 +33,7 @@
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
 
-(setq doom-theme 'doom-sourcerer)
+(setq doom-theme 'doom-old-hope)
 (setq display-line-numbers-type t)
 (setq org-directory "~/org/")
 
