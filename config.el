@@ -160,6 +160,35 @@ That namespace has the `jail'/`judge' aliases and the `config' var loaded."
 
 ;; Clear any prior single-key binding on `e s` (from an earlier reload) so it
 ;; can be turned into a sub-prefix without "starts with non-prefix key" errors.
+(defun agent-jail-judge-claude (id)
+  "Pick one of the open jails and judge it once with Claude as the oracle,
+via `(judge/judge-claude! config ID)'."
+  (interactive
+   (let ((ids (agent-jail--ids)))
+     (unless ids (user-error "No open jails"))
+     (list (completing-read "Judge (claude) jail: " ids nil t))))
+  (agent-jail--eval (format "(judge/judge-claude! config %S)" id))
+  (message "agent-jail judge (claude): %s" id))
+
+(defun agent-jail-fix-ci-cd (url)
+  "Spin up a job that diagnoses and fixes a failing CI/CD run.
+With a GitHub Actions run URL, point the agent straight at it; leave it
+empty to let the agent find the latest failed run itself via gh."
+  (interactive "sGitHub Actions run URL (empty = latest failed): ")
+  (let ((form (if (string-empty-p (string-trim url))
+                  "(jail/fix-ci-cd! config)"
+                (format "(jail/fix-ci-cd! config %S)" (string-trim url)))))
+    (agent-jail--eval form)
+    (message "agent-jail fix-ci-cd: %s" form)))
+
+(defun agent-jail-check-lint-test ()
+  "Run the local quality gate (make test/lint/type-check in LeadForgeAI, make
+test in robots-clj). If everything is green nothing happens; on any failure a
+jail fix-job is spun up with the captured output as its prompt."
+  (interactive)
+  (agent-jail--eval "(jail/check-lint-test! config)")
+  (message "agent-jail check-lint-test: running local gate..."))
+
 (map! :leader :prefix "e" "s" nil)
 
 (map! :leader
@@ -168,6 +197,9 @@ That namespace has the `jail'/`judge' aliases and the `config' var loaded."
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
       :desc "agent-jail: run job (claude)" "r" #'agent-jail-run-job-claude
       :desc "agent-jail: abort (stop) job"  "a" #'agent-jail-stop-job
+      :desc "agent-jail: judge (claude)"    "j" #'agent-jail-judge-claude
+      :desc "agent-jail: fix CI/CD"         "f" #'agent-jail-fix-ci-cd
+      :desc "agent-jail: check lint+test"   "c" #'agent-jail-check-lint-test
       (:prefix ("s" . "agent-jail: ship")
        :desc "ship local"     "l" #'agent-jail-ship-job
        :desc "ship and ship"  "s" #'agent-jail-ship-push-job))
