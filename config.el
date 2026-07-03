@@ -102,10 +102,75 @@
     (cider-eval-defun-at-point)
     (delete-region beg (point))))
 
+;;; agent-jail: drive jobs from the agent-jail.work nREPL namespace ------------
+
+(defun agent-jail--eval (form)
+  "Eval FORM (a string) in the `agent-jail.work' namespace via CIDER.
+That namespace has the `jail'/`judge' aliases and the `config' var loaded."
+  (cider-interactive-eval form nil nil '("ns" "agent-jail.work")))
+
+(defun agent-jail--ids ()
+  "Return the list of currently open jail ids from the REPL (via `get-ids')."
+  (let* ((res (cider-nrepl-sync-request:eval
+               "(agent-jail.core/get-ids)" nil "agent-jail.work"))
+         (val (nrepl-dict-get res "value")))
+    (unless val
+      (user-error "No REPL value from get-ids (is CIDER connected?)"))
+    (append (car (read-from-string val)) nil)))
+
+(defun agent-jail-run-job-claude ()
+  "Turn the current .md buffer into a keyword and run it as a claude job.
+`~/Work/agent-jail/receipts-own-llm.md' becomes
+`(jail/run-job-md-claude! :receipts-own-llm config)'."
+  (interactive)
+  (unless (and buffer-file-name
+               (string= (file-name-extension buffer-file-name) "md"))
+    (user-error "Not visiting a .md file"))
+  (let* ((kw (concat ":" (file-name-base buffer-file-name)))
+         (form (format "(jail/run-job-md-claude! %s config)" kw)))
+    (agent-jail--eval form)
+    (message "agent-jail run: %s" form)))
+
+(defun agent-jail-stop-job (id)
+  "Pick one of the open jails and stop it via `(jail/stop! ID)'."
+  (interactive
+   (let ((ids (agent-jail--ids)))
+     (unless ids (user-error "No open jails"))
+     (list (completing-read "Stop jail: " ids nil t))))
+  (agent-jail--eval (format "(jail/stop! %S)" id))
+  (message "agent-jail stop: %s" id))
+
+(defun agent-jail-ship-job (id)
+  "Pick one of the open jails and ship it locally via `(jail/ship! ID)'."
+  (interactive
+   (let ((ids (agent-jail--ids)))
+     (unless ids (user-error "No open jails"))
+     (list (completing-read "Ship (local) jail: " ids nil t))))
+  (agent-jail--eval (format "(jail/ship! %S)" id))
+  (message "agent-jail ship (local): %s" id))
+
+(defun agent-jail-ship-push-job (id)
+  "Pick one of the open jails and ship+push it via `(jail/ship-push! ID)'."
+  (interactive
+   (let ((ids (agent-jail--ids)))
+     (unless ids (user-error "No open jails"))
+     (list (completing-read "Ship+push jail: " ids nil t))))
+  (agent-jail--eval (format "(jail/ship-push! %S)" id))
+  (message "agent-jail ship+push: %s" id))
+
+;; Clear any prior single-key binding on `e s` (from an earlier reload) so it
+;; can be turned into a sub-prefix without "starts with non-prefix key" errors.
+(map! :leader :prefix "e" "s" nil)
+
 (map! :leader
       :prefix ("e" . "Clojure Command Center")
       :desc "Persist Scope Macro" "p" #'persist-scope
-      :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench)
+      :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
+      :desc "agent-jail: run job (claude)" "r" #'agent-jail-run-job-claude
+      :desc "agent-jail: abort (stop) job"  "a" #'agent-jail-stop-job
+      (:prefix ("s" . "agent-jail: ship")
+       :desc "ship local"     "l" #'agent-jail-ship-job
+       :desc "ship and ship"  "s" #'agent-jail-ship-push-job))
 
 (after! cc-mode
   (defun my/cpp-run-current-file-in-term ()
