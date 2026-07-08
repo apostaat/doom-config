@@ -105,9 +105,16 @@
 ;;; agent-jail: drive jobs from the agent-jail.work nREPL namespace ------------
 
 (defun agent-jail--eval (form)
-  "Eval FORM (a string) in the `agent-jail.work' namespace via CIDER.
-That namespace has the `jail'/`judge' aliases and the `config' var loaded."
-  (cider-interactive-eval form nil nil '("ns" "agent-jail.work")))
+  "Eval FORM (a string) in the `agent-jail.work' namespace on the current REPL.
+
+Sends an EXPLICIT ns so it works from any buffer — including a .md file, where
+`cider-interactive-eval' would fall back to `cider-current-ns' (\"user\") and
+fail to resolve the `jail'/`judge' aliases and `config', so the form would
+silently never run. Results and errors are shown in the echo area."
+  (cider-nrepl-request:eval
+   form
+   (cider-interactive-eval-handler nil)
+   "agent-jail.work"))
 
 (defun agent-jail--ids ()
   "Return the list of currently open jail ids from the REPL (via `get-ids')."
@@ -129,7 +136,7 @@ That namespace has the `jail'/`judge' aliases and the `config' var loaded."
   (let* ((kw (concat ":" (file-name-base buffer-file-name)))
          (form (format "(jail/run-job-md-claude! %s config)" kw)))
     (agent-jail--eval form)
-    (message "agent-jail run: %s" form)))
+    (message "agent-jail run: %s" kw)))
 
 (defun agent-jail-stop-job (id)
   "Pick one of the open jails and stop it via `(jail/stop! ID)'."
@@ -161,25 +168,38 @@ That namespace has the `jail'/`judge' aliases and the `config' var loaded."
 ;; Clear any prior single-key binding on `e s` (from an earlier reload) so it
 ;; can be turned into a sub-prefix without "starts with non-prefix key" errors.
 (defun agent-jail-judge-claude (id)
-  "Pick one of the open jails and judge it once with Claude as the oracle,
-via `(judge/judge-claude! config ID)'."
+  "Pick an open jail and judge it once with Claude as the oracle, in its own
+tmux tab via `(judge/open-judge-once! \"config.edn\" ID \"claude\")'."
   (interactive
    (let ((ids (agent-jail--ids)))
      (unless ids (user-error "No open jails"))
      (list (completing-read "Judge (claude) jail: " ids nil t))))
-  (agent-jail--eval (format "(judge/judge-claude! config %S)" id))
-  (message "agent-jail judge (claude): %s" id))
+  (agent-jail--eval (format "(judge/open-judge-once! \"config.edn\" %S \"claude\")" id))
+  (message "agent-jail judge (claude) tab: judge-%s" id))
+
+(defun agent-jail-judge-local (id)
+  "Pick an open jail and judge it once with the local ollama model
+(deepseek-r1:32b) in its own tmux tab via
+`(judge/open-judge-once! \"config.edn\" ID \"local\")'. Starts `ollama serve'
+first if the server is down."
+  (interactive
+   (let ((ids (agent-jail--ids)))
+     (unless ids (user-error "No open jails"))
+     (list (completing-read "Judge (local) jail: " ids nil t))))
+  (agent-jail--eval (format "(judge/open-judge-once! \"config.edn\" %S \"local\")" id))
+  (message "agent-jail judge (local) tab: judge-%s" id))
 
 (defun agent-jail-fix-ci-cd (url)
   "Spin up a job that diagnoses and fixes a failing CI/CD run.
 With a GitHub Actions run URL, point the agent straight at it; leave it
 empty to let the agent find the latest failed run itself via gh."
   (interactive "sGitHub Actions run URL (empty = latest failed): ")
-  (let ((form (if (string-empty-p (string-trim url))
-                  "(jail/fix-ci-cd! config)"
-                (format "(jail/fix-ci-cd! config %S)" (string-trim url)))))
+  (let* ((url (string-trim url))
+         (form (if (string-empty-p url)
+                   "(jail/fix-ci-cd! config)"
+                 (format "(jail/fix-ci-cd! config %S)" url))))
     (agent-jail--eval form)
-    (message "agent-jail fix-ci-cd: %s" form)))
+    (message "agent-jail fix-ci-cd: %s" (if (string-empty-p url) "latest failed" url))))
 
 (defun agent-jail-check-lint-test ()
   "Run the local quality gate (make test/lint/type-check in LeadForgeAI, make
@@ -189,7 +209,48 @@ jail fix-job is spun up with the captured output as its prompt."
   (agent-jail--eval "(jail/check-lint-test! config)")
   (message "agent-jail check-lint-test: running local gate..."))
 
-(map! :leader :prefix "e" "s" nil)
+(defvar agent-jail-reclaim-classes '("jails" "orphans" "docker" "caches")
+  "Disk-reclaim classes offered by `agent-jail-reclaim'.
+jails   - delete every FINISHED jail's workspace (running jails spared)
+orphans - kill ownerless `docker run' containers + their anon volumes
+docker  - global `docker system prune -a --volumes' + build cache
+caches  - regenerable ~/.cache children (huggingface spared)")
+
+(defun agent-jail-reclaim (&optional classes)
+  "Free disk space via `(jail/reclaim!)' on the REPL.
+
+Deletes finished jails, kills ownerless docker containers (leaked test DBs),
+prunes docker globally, and clears regenerable caches. Source repos are never
+touched, so deployments/.localdata and deployments/training* stay safe, and
+deliberately named standalone containers are spared.
+
+With a prefix argument, prompt for a subset of `agent-jail-reclaim-classes' to
+sweep; otherwise sweep everything. Confirms first — this is destructive."
+  (interactive
+   (list (when current-prefix-arg
+           (completing-read-multiple
+            "Reclaim classes (comma-separated): " agent-jail-reclaim-classes))))
+  (when (yes-or-no-p
+         (if classes
+             (format "Reclaim %s? " (string-join classes ", "))
+           "Reclaim ALL (finished jails, orphan containers, docker, caches)? "))
+    ;; Selecting a subset means turning the others OFF (reclaim! defaults all on),
+    ;; so build the full toggle map explicitly.
+    (let ((form (if classes
+                    (format "(jail/reclaim! {%s})"
+                            (mapconcat
+                             (lambda (c)
+                               (format ":%s? %s" c
+                                       (if (member c classes) "true" "false")))
+                             agent-jail-reclaim-classes " "))
+                  "(jail/reclaim!)")))
+      (agent-jail--eval form)
+      (message "agent-jail reclaim: %s"
+               (if classes (string-join classes ", ") "all")))))
+
+;; Clear prior single-key bindings on `e s`/`e j` (from an earlier reload) so they
+;; can be turned into sub-prefixes without "starts with non-prefix key" errors.
+(map! :leader :prefix "e" "s" nil "j" nil)
 
 (map! :leader
       :prefix ("e" . "Clojure Command Center")
@@ -197,9 +258,12 @@ jail fix-job is spun up with the captured output as its prompt."
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
       :desc "agent-jail: run job (claude)" "r" #'agent-jail-run-job-claude
       :desc "agent-jail: abort (stop) job"  "a" #'agent-jail-stop-job
-      :desc "agent-jail: judge (claude)"    "j" #'agent-jail-judge-claude
       :desc "agent-jail: fix CI/CD"         "f" #'agent-jail-fix-ci-cd
       :desc "agent-jail: check lint+test"   "c" #'agent-jail-check-lint-test
+      :desc "agent-jail: reclaim disk"      "R" #'agent-jail-reclaim
+      (:prefix ("j" . "agent-jail: judge")
+       :desc "local (deepseek-r1:32b)" "l" #'agent-jail-judge-local
+       :desc "claude"                  "c" #'agent-jail-judge-claude)
       (:prefix ("s" . "agent-jail: ship")
        :desc "ship local"     "l" #'agent-jail-ship-job
        :desc "ship and ship"  "s" #'agent-jail-ship-push-job))
