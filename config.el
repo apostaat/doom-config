@@ -134,7 +134,11 @@ silently never run. Results and errors are shown in the echo area."
                (string= (file-name-extension buffer-file-name) "md"))
     (user-error "Not visiting a .md file"))
   (let* ((kw (concat ":" (file-name-base buffer-file-name)))
-         (form (format "(jail/run-job-md-claude! %s config)" kw)))
+         ;; Reload agent-jail.core first so on-disk fixes (e.g. resolving prompts
+         ;; from tasks/) take effect without manually re-evaluating core.clj in a
+         ;; long-running REPL. core is file-state-backed, so reload is cheap/safe.
+         (form (format "(do (require 'agent-jail.core :reload) (jail/run-job-md-claude! %s config))"
+                       kw)))
     (agent-jail--eval form)
     (message "agent-jail run: %s" kw)))
 
