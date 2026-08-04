@@ -165,6 +165,83 @@ silently never run. Results and errors are shown in the echo area."
   (agent-jail--eval (format "(jail/ship-push! %S)" id))
   (message "agent-jail ship+push: %s" id))
 
+;;; agent-jail: remote tracker tasks -> prompts --------------------------------
+;; All HTTP/auth/env plumbing lives in `agent-jail.tracker' (Clojure): it reads
+;; the envs straight out of deployments/scripts/github_actions.edn and targets
+;; napulse.co — so nothing needs configuring here and there are no env vars to
+;; set. The commands pick a PROJECT, then a task within it, and drive the Clojure
+;; side over the same nREPL used by the other agent-jail verbs. Clojure returns
+;; elisp-readable EDN (vectors/strings only, no maps/keywords).
+
+(defun agent-jail--tracker-eval (form)
+  "Eval FORM in `agent-jail.work' and return the parsed EDN value.
+
+Auto-loads `agent-jail.tracker' (so it works even if a long-running REPL
+predates the work.clj require) and surfaces REPL-side errors instead of
+hiding them behind a generic \"no value\" message."
+  (let* ((wrapped (format "(do (require 'agent-jail.tracker :reload) %s)" form))
+         ;; The first call chains several blocking HTTPS round-trips to
+         ;; napulse.co (login -> projects -> tasks); CIDER's default 10s sync
+         ;; timeout is too tight for that, so give it room.
+         (nrepl-sync-request-timeout 60)
+         (res (cider-nrepl-sync-request:eval wrapped nil "agent-jail.work"))
+         (val (nrepl-dict-get res "value"))
+         (err (nrepl-dict-get res "err"))
+         (ex  (or (nrepl-dict-get res "root-ex") (nrepl-dict-get res "ex"))))
+    (cond
+     (val (car (read-from-string val)))
+     ((or err ex)
+      (user-error "agent-jail.tracker error: %s" (string-trim (or err ex))))
+     (t (user-error "No REPL value (is CIDER connected to agent-jail?)")))))
+
+(defun agent-jail--tracker-alist (form)
+  "Eval FORM (returns [[LABEL ID]…]) and turn it into a (LABEL . ID) alist."
+  (mapcar (lambda (v) (cons (aref v 0) (aref v 1)))
+          (append (agent-jail--tracker-eval form) nil)))
+
+(defun agent-jail--tracker-pick (verb)
+  "Pick a PROJECT, then a «к выполнению» task in it.
+Returns a plist (:project-id P :task-id T) for VERB (shown in the prompts)."
+  (let* ((projects (agent-jail--tracker-alist "(agent-jail.tracker/projects-edn)"))
+         (_ (unless projects (user-error "No projects visible")))
+         (pname (completing-read (format "%s — project: " verb) projects nil t))
+         (pid (cdr (assoc pname projects)))
+         (tasks (agent-jail--tracker-alist
+                 (format "(agent-jail.tracker/todo-tasks-edn %S)" pid)))
+         (_ (unless tasks
+              (user-error "No «к выполнению» tasks in %s" pname)))
+         (tname (completing-read (format "%s — task: " verb) tasks nil t)))
+    (list :project-id pid :task-id (cdr (assoc tname tasks)))))
+
+(defvar agent-jail-tracker-base-url "https://napulse.co"
+  "Base URL of the task tracker, used to open a task's discussion.")
+
+(defun agent-jail-plan-remote-task (project-id id)
+  "SPC e t p — «plan remote task».
+Pick a project, then navigate its «к выполнению» tasks; Enter opens the task's
+discussion in the browser and launches (in ~/Work) a claude session that
+develops the ideal prompt into agent-jail/tasks/<slug>.md — it does NOT run the
+task. Refine/run the result afterwards."
+  (interactive (let ((s (agent-jail--tracker-pick "Plan")))
+                 (list (plist-get s :project-id) (plist-get s :task-id))))
+  (browse-url (format "%s/tasks?projectId=%s&taskId=%s"
+                      agent-jail-tracker-base-url project-id id))
+  (agent-jail--eval
+   (format "(do (require 'agent-jail.tracker :reload) (agent-jail.tracker/plan! %S %S config))"
+           project-id id))
+  (message "agent-jail: prompt-development session started for task %s" id))
+
+(defun agent-jail-execute-remote-task (project-id id)
+  "SPC e t e — «execute remote task».
+Pick a project, then a «к выполнению» task, and run its text as a prompt
+immediately as a claude job (like SPC e r does for a local .md)."
+  (interactive (let ((s (agent-jail--tracker-pick "Execute")))
+                 (list (plist-get s :project-id) (plist-get s :task-id))))
+  (agent-jail--eval
+   (format "(do (require 'agent-jail.tracker :reload) (agent-jail.tracker/execute! %S %S config))"
+           project-id id))
+  (message "agent-jail execute remote task: %s" id))
+
 ;; Clear any prior single-key binding on `e s` (from an earlier reload) so it
 ;; can be turned into a sub-prefix without "starts with non-prefix key" errors.
 (defun agent-jail-judge-claude (id)
@@ -266,7 +343,10 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
        :desc "claude"                  "c" #'agent-jail-judge-claude)
       (:prefix ("s" . "agent-jail: ship")
        :desc "ship local"     "l" #'agent-jail-ship-job
-       :desc "ship and ship"  "s" #'agent-jail-ship-push-job))
+       :desc "ship and ship"  "s" #'agent-jail-ship-push-job)
+      (:prefix ("t" . "agent-jail: remote task")
+       :desc "plan remote task"    "p" #'agent-jail-plan-remote-task
+       :desc "execute remote task" "e" #'agent-jail-execute-remote-task))
 
 (after! cc-mode
   (defun my/cpp-run-current-file-in-term ()
