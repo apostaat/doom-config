@@ -84,5 +84,12 @@
 (package! exec-path-from-shell)
 
 (package! eca :recipe (:host github :repo "editor-code-assistant/eca-emacs" :files ("*.el")))
+
+;; GNU Hyperbole: implicit buttons, HyRolo, HyControl, Koutliner.
+;; :files must keep the kotl/ subdirectory intact (Koutliner lives there and
+;; hyperbole.el adds it to load-path relative to itself).
+(package! hyperbole
+  :recipe (:host github :repo "rswgnu/hyperbole"
+           :files (:defaults "kotl" "DEMO" "FAST-DEMO" "man/*.info" "man/dir" "man/hkey-help.txt")))
 (package! typescript-mode)
 (package! prettier-js)

@@ -689,3 +689,45 @@ This prints:
                    (plist-get bind :current)
                    (plist-get bind :status)))
         report))))
+
+;;; hyperbole: implicit buttons, HyRolo, HyControl, Koutliner ------------------
+
+(use-package! hyperbole
+  ;; Load after startup on first keypress; `hyperbole-mode' is a global minor
+  ;; mode whose keymap holds all default bindings (M-RET, C-h h, C-h A ...).
+  :hook (doom-first-input . hyperbole-mode)
+  :init
+  ;; In org buffers M-RET stays `org-meta-return' everywhere EXCEPT on
+  ;; Hyperbole buttons and org links, where the Action Key takes over.
+  ;; Set to t to let the Action Key handle all org contexts instead.
+  (setq hsys-org-enable-smart-keys 'buttons))
+
+(map! :leader
+      (:prefix ("y" . "hyperbole")
+       :desc "Action Key at point"        "y" #'action-key
+       :desc "Assist Key at point"        "u" #'assist-key
+       :desc "Main menu (C-h h)"          "m" #'hyperbole
+       :desc "Act on named button"        "a" #'hui:hbut-act
+       :desc "Create explicit button"     "c" #'hui:ebut-create
+       :desc "Create global button"       "g" #'hui:gbut-create
+       :desc "Create implicit button"     "i" #'hui:ibut-create
+       :desc "Select thing (grow region)" "." #'hui-select-thing
+       :desc "Search web"                 "/" #'hui-search-web
+       (:prefix ("r" . "hyrolo")
+        :desc "Search (fgrep)"     "r" #'hyrolo-fgrep
+        :desc "Search (regexp)"    "g" #'hyrolo-grep
+        :desc "Search word"        "w" #'hyrolo-word
+        :desc "Add entry"          "a" #'hyrolo-add
+        :desc "Edit entry"         "e" #'hyrolo-edit
+        :desc "Search org files"   "o" #'hyrolo-org
+        :desc "Search org-roam"    "R" #'hyrolo-org-roam)
+       (:prefix ("w" . "hycontrol")
+        :desc "Windows control mode" "w" #'hycontrol-enable-windows-mode
+        :desc "Frames control mode"  "f" #'hycontrol-enable-frames-mode
+        :desc "Windows grid"         "g" #'hycontrol-windows-grid
+        :desc "Grid by major mode"   "m" #'hycontrol-windows-grid-by-major-mode)
+       (:prefix ("k" . "koutliner")
+        :desc "Find/create koutline" "k" #'kfile:find
+        :desc "Insert klink"         "l" #'klink:create
+        :desc "Import file to kotl"  "i" #'kimport:file
+        :desc "Example koutline"     "e" #'kotl-mode:example)))
