@@ -142,6 +142,24 @@ silently never run. Results and errors are shown in the echo area."
     (agent-jail--eval form)
     (message "agent-jail run: %s" kw)))
 
+(defun agent-jail-cleanup-job ()
+  "SPC e d — wipe the jail named after the current .md buffer from local data,
+preserving accumulated knowledge. `~/Work/agent-jail/docs.md' becomes
+`(jail/cleanup! \"docs\")': the jail's Claude memory is exported back to its
+knowledge source, then its job dir (workspace/state), docker stack and tmux
+window are removed from ~/.local/share/agent-jail."
+  (interactive)
+  (unless (and buffer-file-name
+               (string= (file-name-extension buffer-file-name) "md"))
+    (user-error "Not visiting a .md file"))
+  (let ((id (file-name-base buffer-file-name)))
+    (when (yes-or-no-p (format "Cleanup jail %s (workspace удалится, знание экспортируется)? " id))
+      ;; Reload core first so the on-disk cleanup! (knowledge-preserving) runs
+      ;; even in a long-lived REPL that predates it.
+      (agent-jail--eval
+       (format "(do (require 'agent-jail.core :reload) (jail/cleanup! %S))" id))
+      (message "agent-jail cleanup: %s" id))))
+
 (defun agent-jail-stop-job (id)
   "Pick one of the open jails and stop it via `(jail/stop! ID)'."
   (interactive
@@ -339,6 +357,7 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
       :desc "agent-jail: run job (claude)" "r" #'agent-jail-run-job-claude
       :desc "agent-jail: abort (stop) job"  "a" #'agent-jail-stop-job
+      :desc "agent-jail: cleanup jail (keep knowledge)" "d" #'agent-jail-cleanup-job
       :desc "agent-jail: fix CI/CD"         "f" #'agent-jail-fix-ci-cd
       :desc "agent-jail: check lint+test"   "c" #'agent-jail-check-lint-test
       :desc "agent-jail: reclaim disk"      "R" #'agent-jail-reclaim
