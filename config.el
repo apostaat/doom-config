@@ -419,7 +419,25 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
 
 (with-eval-after-load 'eglot
   (add-to-list 'eglot-server-programs
-               '(elixir-mode . ("/Users/artemapostatov/elixir-ls/release/language_server.sh"))))
+               '(elixir-mode . ("/Users/artemapostatov/elixir-ls/release/language_server.sh")))
+  ;; TypeScript 7+ (нативный, tsgo) несёт LSP в самом tsc (`tsc --lsp`);
+  ;; typescript-language-server с ним несовместим — используем его только
+  ;; как фолбэк для проектов на TS <7.
+  (defun my/ts-lsp-contact (&optional _interactive)
+    (let* ((root (or (when-let ((proj (project-current)))
+                       (project-root proj))
+                     default-directory))
+           (tsc (expand-file-name "node_modules/.bin/tsc" root)))
+      (if (and (file-executable-p tsc)
+               (with-temp-buffer
+                 (ignore-errors (call-process tsc nil t nil "--version"))
+                 (goto-char (point-min))
+                 (re-search-forward "Version \\([0-9]+\\)" nil t)
+                 (>= (string-to-number (match-string 1)) 7)))
+          (list tsc "--lsp" "--stdio")
+        '("typescript-language-server" "--stdio"))))
+  (add-to-list 'eglot-server-programs
+               '((js-mode js-ts-mode typescript-mode typescript-ts-mode tsx-ts-mode) . my/ts-lsp-contact)))
 
 (after! lisp-extra-font-lock
   (lisp-extra-font-lock-global-mode 1))
