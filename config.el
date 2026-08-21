@@ -144,21 +144,26 @@ silently never run. Results and errors are shown in the echo area."
 
 (defun agent-jail-cleanup-job ()
   "SPC e d — wipe the jail named after the current .md buffer from local data,
-preserving accumulated knowledge. `~/Work/agent-jail/docs.md' becomes
-`(jail/cleanup! \"docs\")': the jail's Claude memory is exported back to its
-knowledge source, then its job dir (workspace/state), docker stack and tmux
-window are removed from ~/.local/share/agent-jail."
+preserving accumulated knowledge, and archive the .md into done/.
+`~/Work/agent-jail/docs.md' becomes `(jail/cleanup! \"docs\")': the jail's
+Claude memory is exported back to its knowledge source, then its job dir
+(workspace/state), docker stack and tmux window are removed from
+~/.local/share/agent-jail; finally `(jail/archive-md! \"docs\")' moves the
+prompt file into a sibling done/ folder. The buffer is killed — its visited
+path no longer exists once the file moves."
   (interactive)
   (unless (and buffer-file-name
                (string= (file-name-extension buffer-file-name) "md"))
     (user-error "Not visiting a .md file"))
   (let ((id (file-name-base buffer-file-name)))
-    (when (yes-or-no-p (format "Cleanup jail %s (workspace удалится, знание экспортируется)? " id))
-      ;; Reload core first so the on-disk cleanup! (knowledge-preserving) runs
-      ;; even in a long-lived REPL that predates it.
+    (when (yes-or-no-p (format "Cleanup jail %s (workspace удалится, знание экспортируется, md → done/)? " id))
+      (when (buffer-modified-p) (save-buffer))
+      ;; cleanup! itself archives the .md into done/; reload core first so the
+      ;; on-disk version runs even in a long-lived REPL that predates it.
       (agent-jail--eval
        (format "(do (require 'agent-jail.core :reload) (jail/cleanup! %S))" id))
-      (message "agent-jail cleanup: %s" id))))
+      (kill-buffer)
+      (message "agent-jail cleanup: %s (md → done/)" id))))
 
 (defun agent-jail-stop-job (id)
   "Pick one of the open jails and stop it via `(jail/stop! ID)'."
