@@ -93,3 +93,8 @@
            :files (:defaults "kotl" "DEMO" "FAST-DEMO" "man/*.info" "man/dir" "man/hkey-help.txt")))
 (package! typescript-mode)
 (package! prettier-js)
+
+;; Подсветка ВСЕХ символов стандарта ANSI Common Lisp (функции, макросы,
+;; special operators, типы, константы) — то, чего нет в голом lisp-mode.
+(package! cl-font-lock
+  :recipe (:host github :repo "cl-font-lock/cl-font-lock"))

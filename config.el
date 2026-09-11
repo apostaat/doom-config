@@ -142,6 +142,35 @@ silently never run. Results and errors are shown in the echo area."
     (agent-jail--eval form)
     (message "agent-jail run: %s" kw)))
 
+(defun agent-jail-sequentially-execute (folder &optional start-from)
+  "SPC e r s — sequentially execute every prompt .md in FOLDER in one jail.
+
+Opens a `seq-<folder>' tmux tab running
+`(agent-jail.sequence/open-sequence! FOLDER)': prompts are natural-sorted
+(README/overview/results excluded) and run one by one — deliver prompt, wait
+for the agent's done-marker (`touch'), judge (local deepseek by default),
+ship on :ship / re-judge after :revise, continue past :escalate. The agent's
+chat context is /clear-ed before each new prompt so a long folder doesn't run
+out of context. All IMAGES in the folder (screenshots: jpg/png/…) are attached
+into the jail's files/ as significant visual context and the agent is told to
+view them. Defaults to the visited buffer's directory.
+
+With \\[universal-argument] also asks for START-FROM — a filename substring
+to RESUME the series from (already-done prompts are skipped)."
+  (interactive
+   (list (read-directory-name
+          "Prompt folder: "
+          (and buffer-file-name (file-name-directory buffer-file-name)))
+         (when current-prefix-arg
+           (read-string "Start from prompt (filename substring): "))))
+  (let ((path (directory-file-name (expand-file-name folder))))
+    (agent-jail--eval
+     (format "(do (require 'agent-jail.sequence :reload) (agent-jail.sequence/open-sequence! \"config.edn\" %S %S))"
+             path (or start-from "")))
+    (message "agent-jail sequence: %s%s" path
+             (if (and start-from (not (string-empty-p start-from)))
+                 (format " (from %s)" start-from) ""))))
+
 (defun agent-jail-cleanup-job ()
   "SPC e d — wipe the jail named after the current .md buffer from local data,
 preserving accumulated knowledge, and archive the .md into done/.
@@ -164,6 +193,33 @@ path no longer exists once the file moves."
        (format "(do (require 'agent-jail.core :reload) (jail/cleanup! %S))" id))
       (kill-buffer)
       (message "agent-jail cleanup: %s (md → done/)" id))))
+
+(defun agent-jail-execute-in-jail (id)
+  "SPC e x — deliver the current .md task into an ALREADY-OPEN jail as a
+follow-up prompt, instead of spinning up a new jail (which `SPC e r r' does).
+
+Pick one of the currently open jails; the visited .md is resolved by name and
+run in it via `(jail/execute-in-jail! ID NAME)'. For multi-prompt workflows
+where a single jail handles several tasks in sequence, all in one workspace."
+  (interactive
+   (let ((ids (agent-jail--ids)))
+     (unless ids (user-error "No open jails"))
+     (list (completing-read "Execute in jail: " ids nil t))))
+  (unless (and buffer-file-name
+               (string= (file-name-extension buffer-file-name) "md"))
+    (user-error "Not visiting a .md file"))
+  (when (buffer-modified-p) (save-buffer))
+  ;; Pass the buffer's ABSOLUTE path (not its basename): execute-in-jail! uses a
+  ;; real file verbatim, so any .md on disk works — not only ones under the
+  ;; repo's cwd/tasks that the bare-name resolver can find.
+  (let ((path (expand-file-name buffer-file-name)))
+    ;; Reload core first so the on-disk execute-in-jail! runs even in a
+    ;; long-lived REPL that predates it (same pattern as the run/cleanup verbs).
+    (agent-jail--eval
+     (format "(do (require 'agent-jail.core :reload) (jail/execute-in-jail! %S %S))"
+             id path))
+    (message "agent-jail execute: %s → jail %s"
+             (file-name-base path) id)))
 
 (defun agent-jail-stop-job (id)
   "Pick one of the open jails and stop it via `(jail/stop! ID)'."
@@ -352,20 +408,24 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
       (message "agent-jail reclaim: %s"
                (if classes (string-join classes ", ") "all")))))
 
-;; Clear prior single-key bindings on `e s`/`e j` (from an earlier reload) so they
-;; can be turned into sub-prefixes without "starts with non-prefix key" errors.
-(map! :leader :prefix "e" "s" nil "j" nil)
+;; Clear prior single-key bindings on `e s`/`e j`/`e r` (from an earlier reload)
+;; so they can be turned into sub-prefixes without "starts with non-prefix key"
+;; errors.
+(map! :leader :prefix "e" "s" nil "j" nil "r" nil)
 
 (map! :leader
       :prefix ("e" . "Clojure Command Center")
       :desc "Persist Scope Macro" "p" #'persist-scope
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
-      :desc "agent-jail: run job (claude)" "r" #'agent-jail-run-job-claude
+      :desc "agent-jail: execute in open jail" "x" #'agent-jail-execute-in-jail
       :desc "agent-jail: abort (stop) job"  "a" #'agent-jail-stop-job
       :desc "agent-jail: cleanup jail (keep knowledge)" "d" #'agent-jail-cleanup-job
       :desc "agent-jail: fix CI/CD"         "f" #'agent-jail-fix-ci-cd
       :desc "agent-jail: check lint+test"   "c" #'agent-jail-check-lint-test
       :desc "agent-jail: reclaim disk"      "R" #'agent-jail-reclaim
+      (:prefix ("r" . "agent-jail: run")
+       :desc "run job (claude)"        "r" #'agent-jail-run-job-claude
+       :desc "sequentially execute folder" "s" #'agent-jail-sequentially-execute)
       (:prefix ("j" . "agent-jail: judge")
        :desc "local (deepseek-r1:32b)" "l" #'agent-jail-judge-local
        :desc "claude"                  "c" #'agent-jail-judge-claude)
@@ -463,15 +523,24 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
   (add-to-list 'eglot-server-programs
                '((js-mode js-ts-mode typescript-mode typescript-ts-mode tsx-ts-mode) . my/ts-lsp-contact)))
 
-(after! lisp-extra-font-lock
-  (lisp-extra-font-lock-global-mode 1))
+;; Подсветка стандартной библиотеки CL: font-lock-cl (пакет cl-font-lock) знает
+;; все символы ANSI CL — функции, переменные, типы, декларации; регистрирует
+;; keywords для lisp-mode на загрузке, minor-mode у него нет.
+;; lisp-extra-font-lock дополнительно красит квотированные формы и связанные
+;; переменные (let/lambda/destructuring-bind).
+(use-package! font-lock-cl
+  :after lisp-mode)
+
+(use-package! lisp-extra-font-lock
+  :hook (lisp-mode . lisp-extra-font-lock-mode))
 
 (after! lisp-mode
   (add-to-list 'auto-mode-alist '("\\.opmo\\'" . lisp-mode)))
 
-(after! prog-mode
-  (add-hook! 'lisp-mode-hook
-             #'rainbow-identifiers-mode))
+(after! sly
+  ;; Флекс-комплишен символов от живого SBCL: "mvb" → multiple-value-bind,
+  ;; "w-o-t-s" → with-output-to-string. Работает при подключённом REPL (M-x sly).
+  (setq sly-complete-symbol-function #'sly-flex-completions))
 
 (add-hook 'prog-mode-hook #'rainbow-delimiters-mode)
 
