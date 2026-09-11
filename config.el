@@ -142,6 +142,23 @@ silently never run. Results and errors are shown in the echo area."
     (agent-jail--eval form)
     (message "agent-jail run: %s" kw)))
 
+(defun agent-jail-run-with-screens ()
+  "SPC e r f — run the current .md buffer as a claude job like `SPC e r r', but
+also attach every screenshot (jpg/png/…) sitting in the .md's folder into the
+jail's files/ as significant visual context (the agent is told to view them).
+For tasks whose meaning lives in the images and the .md only comments on them.
+`(jail/run-md-with-screens! :name config)'."
+  (interactive)
+  (unless (and buffer-file-name
+               (string= (file-name-extension buffer-file-name) "md"))
+    (user-error "Not visiting a .md file"))
+  (when (buffer-modified-p) (save-buffer))
+  (let* ((kw (concat ":" (file-name-base buffer-file-name)))
+         (form (format "(do (require 'agent-jail.core :reload) (jail/run-md-with-screens! %s config))"
+                       kw)))
+    (agent-jail--eval form)
+    (message "agent-jail run+screens: %s" kw)))
+
 (defun agent-jail-sequentially-execute (folder &optional start-from)
   "SPC e r s — sequentially execute every prompt .md in FOLDER in one jail.
 
@@ -151,9 +168,8 @@ Opens a `seq-<folder>' tmux tab running
 for the agent's done-marker (`touch'), judge (local deepseek by default),
 ship on :ship / re-judge after :revise, continue past :escalate. The agent's
 chat context is /clear-ed before each new prompt so a long folder doesn't run
-out of context. All IMAGES in the folder (screenshots: jpg/png/…) are attached
-into the jail's files/ as significant visual context and the agent is told to
-view them. Defaults to the visited buffer's directory.
+out of context. Defaults to the visited buffer's directory. (To attach the
+folder's screenshots to a SINGLE .md run, use `SPC e r f' instead.)
 
 With \\[universal-argument] also asks for START-FROM — a filename substring
 to RESUME the series from (already-done prompts are skipped)."
@@ -425,7 +441,8 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
       :desc "agent-jail: reclaim disk"      "R" #'agent-jail-reclaim
       (:prefix ("r" . "agent-jail: run")
        :desc "run job (claude)"        "r" #'agent-jail-run-job-claude
-       :desc "sequentially execute folder" "s" #'agent-jail-sequentially-execute)
+       :desc "sequentially execute folder" "s" #'agent-jail-sequentially-execute
+       :desc "run md + folder screens" "f" #'agent-jail-run-with-screens)
       (:prefix ("j" . "agent-jail: judge")
        :desc "local (deepseek-r1:32b)" "l" #'agent-jail-judge-local
        :desc "claude"                  "c" #'agent-jail-judge-claude)
