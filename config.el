@@ -159,6 +159,45 @@ For tasks whose meaning lives in the images and the .md only comments on them.
     (agent-jail--eval form)
     (message "agent-jail run+screens: %s" kw)))
 
+(defun agent-jail-self-heal-md ()
+  "SPC e r h — run the current .md buffer as a self-heal task: the executor
+edits the agent-jail repo ITSELF in place (no clone), always in the single
+fixed `self-heal' jail — re-running kills the previous session, so heals never
+run in parallel over the live working tree.
+`(jail/self-heal-md! PATH)'."
+  (interactive)
+  (unless (and buffer-file-name
+               (string= (file-name-extension buffer-file-name) "md"))
+    (user-error "Not visiting a .md file"))
+  (when (buffer-modified-p) (save-buffer))
+  ;; Absolute path (not a bare name): self-heal tasks usually live in the repo
+  ;; root next to every other prompt .md, but any .md on disk should heal.
+  (let ((path (expand-file-name buffer-file-name)))
+    (agent-jail--eval
+     (format "(do (require 'agent-jail.core :reload) (jail/self-heal-md! %S))" path))
+    (message "agent-jail self-heal: %s" (file-name-base path))))
+
+(defun agent-jail-compose-spec ()
+  "SPC e r c — compose a spec from the current .md's raw prompt and REPLACE the
+file with it. A `spec-<name>' claude jail over the config :scope studies the
+codebase and overwrites this .md with a self-sufficient spec (context, task,
+affected files, plan, acceptance); the task is NOT implemented. Run the
+resulting spec later as a normal job with `SPC e r r'.
+`(jail/compose-spec! PATH config)'."
+  (interactive)
+  (unless (and buffer-file-name
+               (string= (file-name-extension buffer-file-name) "md"))
+    (user-error "Not visiting a .md file"))
+  (when (buffer-modified-p) (save-buffer))
+  (let ((path (expand-file-name buffer-file-name)))
+    ;; The agent overwrites the visited file behind Emacs's back — auto-revert
+    ;; so the buffer shows the spec once it lands instead of a stale prompt.
+    (auto-revert-mode 1)
+    (agent-jail--eval
+     (format "(do (require 'agent-jail.core :reload) (jail/compose-spec! %S config))" path))
+    (message "agent-jail compose-spec: %s (файл будет перезаписан спекой)"
+             (file-name-base path))))
+
 (defun agent-jail-sequentially-execute (folder &optional start-from)
   "SPC e r s — sequentially execute every prompt .md in FOLDER in one jail.
 
@@ -442,7 +481,9 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
       (:prefix ("r" . "agent-jail: run")
        :desc "run job (claude)"        "r" #'agent-jail-run-job-claude
        :desc "sequentially execute folder" "s" #'agent-jail-sequentially-execute
-       :desc "run md + folder screens" "f" #'agent-jail-run-with-screens)
+       :desc "run md + folder screens" "f" #'agent-jail-run-with-screens
+       :desc "self-heal from md"       "h" #'agent-jail-self-heal-md
+       :desc "compose spec from md"    "c" #'agent-jail-compose-spec)
       (:prefix ("j" . "agent-jail: judge")
        :desc "local (deepseek-r1:32b)" "l" #'agent-jail-judge-local
        :desc "claude"                  "c" #'agent-jail-judge-claude)
@@ -558,6 +599,41 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
   ;; Флекс-комплишен символов от живого SBCL: "mvb" → multiple-value-bind,
   ;; "w-o-t-s" → with-output-to-string. Работает при подключённом REPL (M-x sly).
   (setq sly-complete-symbol-function #'sly-flex-completions))
+
+;;; ghostel: дефолтный терминал на SPC o t (вместо vterm) ----------------------
+
+(use-package! ghostel
+  :defer t
+  :config
+  ;; Тот же попап-слот/размер, что у doom-овского vterm-попапа.
+  (set-popup-rule! "^\\*ghostel-popup" :size 0.25 :vslot -4 :select t :quit nil :ttl 0))
+
+(use-package! evil-ghostel
+  :hook (ghostel-mode . evil-ghostel-mode))
+
+(defun my/ghostel-toggle (&optional arg)
+  "Toggle попап-терминал ghostel в корне проекта (замена `+vterm/toggle').
+С префиксом ARG ведёт себя как `ghostel': не-числовой ARG открывает новый
+инстанс, числовой — переключается на инстанс с этим номером."
+  (interactive "P")
+  ;; require до let: иначе при ещё не загруженном пакете `ghostel-buffer-name'
+  ;; не объявлена special и let-binding получился бы лексическим — `ghostel'
+  ;; его бы не увидел.
+  (require 'ghostel)
+  (let* ((root (or (doom-project-root) default-directory))
+         (name (format "*ghostel-popup:%s*"
+                       (if (doom-project-root) (doom-project-name) "main")))
+         (buf (get-buffer name))
+         (win (and buf (get-buffer-window buf))))
+    (if (and win (null arg))
+        (delete-window win)
+      (let ((default-directory root)
+            (ghostel-buffer-name name))
+        (ghostel arg)))))
+
+(map! :leader
+      :desc "Toggle ghostel popup" "o t" #'my/ghostel-toggle
+      :desc "Open ghostel here"    "o T" #'ghostel)
 
 (add-hook 'prog-mode-hook #'rainbow-delimiters-mode)
 

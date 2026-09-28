@@ -98,3 +98,8 @@
 ;; special operators, типы, константы) — то, чего нет в голом lisp-mode.
 (package! cl-font-lock
   :recipe (:host github :repo "cl-font-lock/cl-font-lock"))
+
+;; Ghostel — терминал на libghostty-vt (движок Ghostty), дефолтный терминал
+;; вместо vterm (SPC o t). Нативный модуль докачивается сам при первом запуске.
+(package! ghostel)
+(package! evil-ghostel)
