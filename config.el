@@ -226,6 +226,44 @@ to RESUME the series from (already-done prompts are skipped)."
              (if (and start-from (not (string-empty-p start-from)))
                  (format " (from %s)" start-from) ""))))
 
+(defun agent-jail-parallel-execute (folder)
+  "SPC e r p — run EVERY prompt .md in FOLDER in PARALLEL, one jail per prompt.
+
+Each .md becomes its own claude jail named after the file — the same flow
+`SPC e r r' uses for a single .md, via
+`(agent-jail.sequence/parallel-execute FOLDER)'. Jails are spun up one after
+another (clones and preview ports don't race), then all agents work at the
+same time, each in its own tmux tab. README/overview/results files are
+excluded like in the sequential run. Unlike `SPC e r s' there is no
+prompt→judge→ship orchestration: the jails live as normal single jobs (the
+judge daemon picks them up when config.edn enables it). Defaults to the
+visited buffer's directory. A prompt that fails to start is logged in the
+REPL and does not stop the rest."
+  (interactive
+   (list (read-directory-name
+          "Prompt folder (parallel): "
+          (and buffer-file-name (file-name-directory buffer-file-name)))))
+  (let ((path (directory-file-name (expand-file-name folder))))
+    (agent-jail--eval
+     (format "(do (require 'agent-jail.sequence :reload) (agent-jail.sequence/parallel-execute %S))"
+             path))
+    (message "agent-jail parallel: %s" path)))
+
+(defun agent-jail-archive-old-prompts ()
+  "SPC e a r — archive prompts older than two weeks into archive/.
+
+Runs `(jail/archive-stale-prompts!)' on the REPL: top-level prompt .md files
+and prompt folders of ~/Work/agent-jail whose ENTIRE content is older than 2
+weeks move into archive/, preserving the nesting (docs.md → archive/docs.md,
+dima-issues/ → archive/dima-issues/ with everything inside, screenshots
+included). One fresh file keeps its whole folder in place; git-tracked
+sources, dot-entries, done/ and archive/ itself are never touched."
+  (interactive)
+  (when (yes-or-no-p "Archive prompts/папки старше 2 недель в archive/? ")
+    (agent-jail--eval
+     "(do (require 'agent-jail.core :reload) (jail/archive-stale-prompts!))")
+    (message "agent-jail archive: промпты старше 2 недель → archive/")))
+
 (defun agent-jail-cleanup-job ()
   "SPC e d — wipe the jail named after the current .md buffer from local data,
 preserving accumulated knowledge, and archive the .md into done/.
@@ -463,23 +501,26 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
       (message "agent-jail reclaim: %s"
                (if classes (string-join classes ", ") "all")))))
 
-;; Clear prior single-key bindings on `e s`/`e j`/`e r` (from an earlier reload)
-;; so they can be turned into sub-prefixes without "starts with non-prefix key"
-;; errors.
-(map! :leader :prefix "e" "s" nil "j" nil "r" nil)
+;; Clear prior single-key bindings on `e s`/`e j`/`e r`/`e a` (from an earlier
+;; reload — `e a` used to be "abort" directly) so they can be turned into
+;; sub-prefixes without "starts with non-prefix key" errors.
+(map! :leader :prefix "e" "s" nil "j" nil "r" nil "a" nil)
 
 (map! :leader
       :prefix ("e" . "Clojure Command Center")
       :desc "Persist Scope Macro" "p" #'persist-scope
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
       :desc "agent-jail: execute in open jail" "x" #'agent-jail-execute-in-jail
-      :desc "agent-jail: abort (stop) job"  "a" #'agent-jail-stop-job
       :desc "agent-jail: cleanup jail (keep knowledge)" "d" #'agent-jail-cleanup-job
       :desc "agent-jail: fix CI/CD"         "f" #'agent-jail-fix-ci-cd
       :desc "agent-jail: check lint+test"   "c" #'agent-jail-check-lint-test
       :desc "agent-jail: reclaim disk"      "R" #'agent-jail-reclaim
+      (:prefix ("a" . "agent-jail: abort/archive")
+       :desc "abort (stop) job"            "a" #'agent-jail-stop-job
+       :desc "archive prompts older 2w"    "r" #'agent-jail-archive-old-prompts)
       (:prefix ("r" . "agent-jail: run")
        :desc "run job (claude)"        "r" #'agent-jail-run-job-claude
+       :desc "run folder in parallel"  "p" #'agent-jail-parallel-execute
        :desc "sequentially execute folder" "s" #'agent-jail-sequentially-execute
        :desc "run md + folder screens" "f" #'agent-jail-run-with-screens
        :desc "self-heal from md"       "h" #'agent-jail-self-heal-md
