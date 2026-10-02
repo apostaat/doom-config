@@ -198,33 +198,52 @@ resulting spec later as a normal job with `SPC e r r'.
     (message "agent-jail compose-spec: %s (файл будет перезаписан спекой)"
              (file-name-base path))))
 
-(defun agent-jail-sequentially-execute (folder &optional start-from)
+(defun agent-jail-sequentially-execute (folder judge &optional start-from fresh)
   "SPC e r s — sequentially execute every prompt .md in FOLDER in one jail.
 
 Opens a `seq-<folder>' tmux tab running
-`(agent-jail.sequence/open-sequence! FOLDER)': prompts are natural-sorted
-(README/overview/results excluded) and run one by one — deliver prompt, wait
-for the agent's done-marker (`touch'), judge (local deepseek by default),
-ship on :ship / re-judge after :revise, continue past :escalate. The agent's
-chat context is /clear-ed before each new prompt so a long folder doesn't run
-out of context. Defaults to the visited buffer's directory. (To attach the
+`(agent-jail.sequence/open-sequence! FOLDER)': prompts run one by one —
+numbered files in natural order, digit-less ones (billing-svc.md) after
+them, README/overview/results excluded, shared-context files glued as the
+foundation of EVERY prompt instead of running on their own. Per prompt:
+deliver, wait for the agent's done-marker (`touch'), judge, ship on :ship /
+re-judge after :revise, continue past :escalate. The agent's chat context
+is /clear-ed before each new prompt so a long folder doesn't run out of
+context. Defaults to the visited buffer's directory. (To attach the
 folder's screenshots to a SINGLE .md run, use `SPC e r f' instead.)
 
+By default the series AUTO-RESUMES: phases closed in a previous run
+(shipped or nothing-to-change) are skipped, so re-running does NOT redo
+finished work — it continues the tail. The progress ledger lives in the
+jail's seq/ dir (`.complete' markers).
+
+JUDGE picks the verdict oracle for the whole series: `claude' (default —
+the local model fights the vLLM containers for the GPU and stalls the
+series), `local' (free verdicts on the local deepseek) or `config'
+(whatever config.edn says).
+
 With \\[universal-argument] also asks for START-FROM — a filename substring
-to RESUME the series from (already-done prompts are skipped)."
+to RESUME the series from (already-done prompts are skipped). With
+\\[universal-argument] \\[universal-argument] do a FRESH run: wipe the
+progress ledger and run every phase from scratch."
   (interactive
    (list (read-directory-name
           "Prompt folder: "
           (and buffer-file-name (file-name-directory buffer-file-name)))
-         (when current-prefix-arg
-           (read-string "Start from prompt (filename substring): "))))
+         (completing-read "Judge oracle (default claude): "
+                          '("claude" "local" "config") nil t nil nil "claude")
+         (when (equal current-prefix-arg '(4))
+           (read-string "Start from prompt (filename substring): "))
+         (equal current-prefix-arg '(16))))
   (let ((path (directory-file-name (expand-file-name folder))))
     (agent-jail--eval
-     (format "(do (require 'agent-jail.sequence :reload) (agent-jail.sequence/open-sequence! \"config.edn\" %S %S))"
-             path (or start-from "")))
-    (message "agent-jail sequence: %s%s" path
-             (if (and start-from (not (string-empty-p start-from)))
-                 (format " (from %s)" start-from) ""))))
+     (format "(do (require 'agent-jail.sequence :reload) (agent-jail.sequence/open-sequence! \"config.edn\" %S %S {:judge-oracle :%s%s}))"
+             path (or start-from "") judge (if fresh " :fresh true" "")))
+    (message "agent-jail sequence: %s (judge %s)%s" path judge
+             (cond (and start-from (not (string-empty-p start-from)))
+                   (format " (from %s)" start-from)
+                   fresh " (FRESH — redo all)"
+                   (t " (auto-resume)")))))
 
 (defun agent-jail-parallel-execute (folder)
   "SPC e r p — run EVERY prompt .md in FOLDER in PARALLEL, one jail per prompt.
@@ -462,6 +481,19 @@ jail fix-job is spun up with the captured output as its prompt."
   (agent-jail--eval "(jail/check-lint-test! config)")
   (message "agent-jail check-lint-test: running local gate..."))
 
+(defun agent-jail-fix-merge-conflicts ()
+  "SPC e f m — like self-heal, but for merge conflicts: open ONE in-place jail
+in a `merge-conflicts' tab (re-running kills the previous session). The AGENT
+itself scans the working repos and resolves conflicts thoughtfully; Clojure
+does no scanning, so this returns immediately. Calls
+`(jail/fix-merge-conflicts!)'."
+  (interactive)
+  ;; Reload core first — in a long-running REPL the namespace may predate this
+  ;; function, so without :reload `jail/fix-merge-conflicts!' fails to resolve
+  ;; and the tab silently never opens (same pattern as self-heal/run/compose).
+  (agent-jail--eval "(do (require 'agent-jail.core :reload) (jail/fix-merge-conflicts!))")
+  (message "agent-jail fix-merge-conflicts: opened merge-conflicts tab"))
+
 (defvar agent-jail-reclaim-classes '("jails" "orphans" "docker" "caches")
   "Disk-reclaim classes offered by `agent-jail-reclaim'.
 jails   - delete every FINISHED jail's workspace (running jails spared)
@@ -504,7 +536,7 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
 ;; Clear prior single-key bindings on `e s`/`e j`/`e r`/`e a` (from an earlier
 ;; reload — `e a` used to be "abort" directly) so they can be turned into
 ;; sub-prefixes without "starts with non-prefix key" errors.
-(map! :leader :prefix "e" "s" nil "j" nil "r" nil "a" nil)
+(map! :leader :prefix "e" "s" nil "j" nil "r" nil "a" nil "f" nil)
 
 (map! :leader
       :prefix ("e" . "Clojure Command Center")
@@ -512,8 +544,10 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
       :desc "Quick Bench Current Expression" "b" #'clj-insert-quick-bench
       :desc "agent-jail: execute in open jail" "x" #'agent-jail-execute-in-jail
       :desc "agent-jail: cleanup jail (keep knowledge)" "d" #'agent-jail-cleanup-job
-      :desc "agent-jail: fix CI/CD"         "f" #'agent-jail-fix-ci-cd
       :desc "agent-jail: check lint+test"   "c" #'agent-jail-check-lint-test
+      (:prefix ("f" . "agent-jail: fix")
+       :desc "fix failed CI/CD"       "c" #'agent-jail-fix-ci-cd
+       :desc "fix merge conflicts"    "m" #'agent-jail-fix-merge-conflicts)
       :desc "agent-jail: reclaim disk"      "R" #'agent-jail-reclaim
       (:prefix ("a" . "agent-jail: abort/archive")
        :desc "abort (stop) job"            "a" #'agent-jail-stop-job
