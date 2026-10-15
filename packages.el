@@ -103,3 +103,7 @@
 ;; вместо vterm (SPC o t). Нативный модуль докачивается сам при первом запуске.
 (package! ghostel)
 (package! evil-ghostel)
+
+;; mermaid-mode — правка и превью .mmd/.mermaid диаграмм. Рендер через mmdc
+;; (mermaid-cli, ставится из node/mise). Конфиг и биндинги — в config.el.
+(package! mermaid-mode)

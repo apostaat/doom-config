@@ -198,6 +198,27 @@ resulting spec later as a normal job with `SPC e r r'.
     (message "agent-jail compose-spec: %s (файл будет перезаписан спекой)"
              (file-name-base path))))
 
+(defun agent-jail-compose-spec-folder ()
+  "SPC e r c f — like `agent-jail-compose-spec', but ALSO attach every screenshot
+\(jpg/png/…) sitting in the .md's folder into the jail, for specs built from a
+bug report WITH screenshots: the agent studies the images (Read on files/<name>)
+before composing, since the .md text only comments on them. Same deliverable —
+this .md is overwritten with a self-sufficient spec; the task is NOT implemented.
+`(jail/compose-spec-folder! PATH config)'."
+  (interactive)
+  (unless (and buffer-file-name
+               (string= (file-name-extension buffer-file-name) "md"))
+    (user-error "Not visiting a .md file"))
+  (when (buffer-modified-p) (save-buffer))
+  (let ((path (expand-file-name buffer-file-name)))
+    ;; The agent overwrites the visited file behind Emacs's back — auto-revert
+    ;; so the buffer shows the spec once it lands instead of a stale prompt.
+    (auto-revert-mode 1)
+    (agent-jail--eval
+     (format "(do (require 'agent-jail.core :reload) (jail/compose-spec-folder! %S config))" path))
+    (message "agent-jail compose-spec+screens: %s (файл будет перезаписан спекой)"
+             (file-name-base path))))
+
 (defun agent-jail-sequentially-execute (folder judge &optional start-from fresh)
   "SPC e r s — sequentially execute every prompt .md in FOLDER in one jail.
 
@@ -558,7 +579,9 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
        :desc "sequentially execute folder" "s" #'agent-jail-sequentially-execute
        :desc "run md + folder screens" "f" #'agent-jail-run-with-screens
        :desc "self-heal from md"       "h" #'agent-jail-self-heal-md
-       :desc "compose spec from md"    "c" #'agent-jail-compose-spec)
+       (:prefix ("c" . "agent-jail: compose spec")
+        :desc "from single md"            "c" #'agent-jail-compose-spec
+        :desc "from folder (+screens)"    "f" #'agent-jail-compose-spec-folder))
       (:prefix ("j" . "agent-jail: judge")
        :desc "local (deepseek-r1:32b)" "l" #'agent-jail-judge-local
        :desc "claude"                  "c" #'agent-jail-judge-claude)
@@ -1010,3 +1033,23 @@ This prints:
         :desc "Insert klink"         "l" #'klink:create
         :desc "Import file to kotl"  "i" #'kimport:file
         :desc "Example koutline"     "e" #'kotl-mode:example)))
+
+;;; mermaid-mode: правка и превью .mmd/.mermaid диаграмм -----------------------
+;; Рендер через mmdc (mermaid-cli). mmdc ставится из node (mise) и попадает в
+;; exec-path через exec-path-from-shell (см. начало файла); на всякий случай
+;; резолвим абсолютный путь, если он найден. Локальлидер `SPC m' в Doom задаётся
+;; per-major-mode, поэтому эти биндинги действуют только в mermaid-mode и не
+;; трогают `SPC m'-биндинги других режимов (c++, elixir и т.д.).
+(use-package! mermaid-mode
+  :mode ("\\.mmd\\'" "\\.mermaid\\'")
+  :config
+  (when-let ((mmdc (executable-find "mmdc")))
+    (setq mermaid-mmdc-location mmdc))
+  (map! :map mermaid-mode-map
+        :localleader
+        :desc "Compile (current file)" "c" #'mermaid-compile
+        :desc "Compile buffer"         "b" #'mermaid-compile-buffer
+        :desc "Compile region"         "r" #'mermaid-compile-region
+        :desc "Compile file…"          "f" #'mermaid-compile-file
+        :desc "Open in browser"        "o" #'mermaid-open-browser
+        :desc "Open online docs"       "d" #'mermaid-open-doc))
