@@ -39,8 +39,19 @@
 
 (setq org-roam-directory "~/org/roam")
 
+;; paredit ставится как зависимость cider (модуль :lang clojure), но автолоады
+;; у него есть только для paredit-mode. Без этого блока команды ниже не fbound,
+;; и любой код, проверяющий биндинги на commandp (sly-db-setup, which-key),
+;; падает с "Wrong type argument: commandp, paredit-wrap-sexp".
+(use-package! paredit
+  :commands (paredit-join-sexps paredit-split-sexp paredit-kill
+             paredit-backward-slurp-sexp paredit-backward-barf-sexp
+             paredit-forward-slurp-sexp paredit-forward-barf-sexp
+             paredit-raise-sexp paredit-wrap-sexp paredit-meta-doublequote))
+
 (map! (:leader
-       (:map (clojure-mode-map clojurescript-mode-map emacs-lisp-mode-map)
+       (:map (clojure-mode-map clojurescript-mode-map emacs-lisp-mode-map
+              lisp-mode-map lisp-data-mode-map sly-mrepl-mode-map)
              (:prefix ("k" . "lisp")
                       "j" #'paredit-join-sexps
                       "c" #'paredit-split-sexp
@@ -691,7 +702,9 @@ sweep; otherwise sweep everything. Confirms first — this is destructive."
   :hook (lisp-mode . lisp-extra-font-lock-mode))
 
 (after! lisp-mode
-  (add-to-list 'auto-mode-alist '("\\.opmo\\'" . lisp-mode)))
+  (add-to-list 'auto-mode-alist '("\\.opmo\\'" . lisp-mode))
+  ;; Emacs 30+ отдаёт .cl в opencl-c-mode (OpenCL C); у нас .cl — Common Lisp.
+  (add-to-list 'auto-mode-alist '("\\.cl\\'" . lisp-mode)))
 
 (after! sly
   ;; Флекс-комплишен символов от живого SBCL: "mvb" → multiple-value-bind,
@@ -1003,6 +1016,9 @@ This prints:
   ;; Hyperbole buttons and org links, where the Action Key takes over.
   ;; Set to t to let the Action Key handle all org contexts instead.
   (setq hsys-org-enable-smart-keys 'buttons))
+
+(add-hook 'pdf-view-mode-hook (lambda () (display-line-numbers-mode -1)))
+
 
 (map! :leader
       (:prefix ("y" . "hyperbole")
